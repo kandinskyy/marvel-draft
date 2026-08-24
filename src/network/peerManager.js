@@ -251,22 +251,26 @@ class PeerManager {
     if (notifyOpponent) {
       try { this.send('PLAYER_LEFT', { nickname }); } catch(e){}
     }
-    if (this.mqttClient) {
-      try { this.mqttClient.end(true); } catch(e){}
-      this.mqttClient = null;
-    }
-    if (this.peer) {
-      try { this.peer.destroy(); } catch(e){}
-      this.peer = null;
-    }
-    if (this.broadcastChannel) {
-      try { this.broadcastChannel.close(); } catch(e){}
-      this.broadcastChannel = null;
-    }
-    this.isConnected = false;
-    this.roomCode = null;
-    this.topic = null;
-    this.updateStatus('Disconnected');
+
+    // 300ms delay to allow WebSocket buffer to flush packet to broker
+    setTimeout(() => {
+      if (this.mqttClient) {
+        try { this.mqttClient.end(true); } catch(e){}
+        this.mqttClient = null;
+      }
+      if (this.peer) {
+        try { this.peer.destroy(); } catch(e){}
+        this.peer = null;
+      }
+      if (this.broadcastChannel) {
+        try { this.broadcastChannel.close(); } catch(e){}
+        this.broadcastChannel = null;
+      }
+      this.isConnected = false;
+      this.roomCode = null;
+      this.topic = null;
+      this.updateStatus('Disconnected');
+    }, 300);
   }
 }
 

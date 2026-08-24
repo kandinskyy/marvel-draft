@@ -24,9 +24,8 @@ export default function DraftScreen({
   const currentTurnNick = draftState.turnNick || (draftState.turn === 1 ? player1.nickname : player2.nickname);
   const myNick = localStorage.getItem('marvel_draft_nick') || '';
 
-  const isMyTurn = (currentTurnNick.toLowerCase() === myNick.toLowerCase()) ||
-                   (draftState.turn === 1 && player1.id === myPeerId) || 
-                   (draftState.turn === 2 && player2.id === myPeerId);
+  // Strict 100% turn determination based exclusively on turnNick
+  const isMyTurn = currentTurnNick.trim().toLowerCase() === myNick.trim().toLowerCase();
 
   const p1Draft = draftState.p1Draft || {};
   const p2Draft = draftState.p2Draft || {};
@@ -156,13 +155,39 @@ export default function DraftScreen({
         borderRadius: '16px',
         border: '1px solid rgba(255, 255, 255, 0.12)'
       }}>
-        <button
-          className="btn-marvel btn-marvel-secondary"
-          onClick={onLeaveMatch}
-          style={{ padding: '8px 14px', fontSize: '0.85rem' }}
-        >
-          <ArrowLeft size={16} /> Назад
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            className="btn-marvel btn-marvel-secondary"
+            onClick={onLeaveMatch}
+            style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+          >
+            <ArrowLeft size={16} /> Назад
+          </button>
+
+          {/* Room Code Badge Header */}
+          {roomCode && (
+            <div 
+              onClick={handleCopyCode}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                background: 'rgba(234, 179, 8, 0.15)',
+                border: '1px dashed #eab308',
+                color: copied ? '#4ade80' : '#fef08a',
+                fontSize: '0.85rem',
+                fontWeight: '800',
+                cursor: 'pointer'
+              }}
+            >
+              <Key size={14} color="#eab308" />
+              <span>Код: <strong>{roomCode}</strong></span>
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+            </div>
+          )}
+        </div>
 
         {/* Current Turn Indicator & Timer */}
         {!draftFinished ? (
@@ -422,36 +447,6 @@ export default function DraftScreen({
           </div>
         </div>
       </div>
-
-      {/* Room Code Footer Pill for Reconnecting & Spectating */}
-      {roomCode && (
-        <div 
-          onClick={handleCopyCode}
-          style={{
-            marginTop: '16px',
-            alignSelf: 'center',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 20px',
-            borderRadius: '20px',
-            background: 'rgba(15, 23, 42, 0.85)',
-            border: '1px dashed rgba(234, 179, 8, 0.5)',
-            color: copied ? '#4ade80' : '#fef08a',
-            fontSize: '0.85rem',
-            fontWeight: '700',
-            cursor: 'pointer',
-            backdropFilter: 'blur(10px)'
-          }}
-        >
-          <Key size={14} color="#eab308" />
-          <span>Код комнаты: <strong>{roomCode}</strong></span>
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '4px' }}>
-            ({copied ? 'Скопировано!' : 'нажмите для зрителей/переподключения'})
-          </span>
-        </div>
-      )}
 
       {/* Character Role Selection Modal */}
       {drawnChar && isMyTurn && (

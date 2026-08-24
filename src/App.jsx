@@ -58,16 +58,20 @@ export default function App() {
           let newSpectators = [...spectators];
 
           if (pMode === 'spectator' || newPlayers.length >= targetCap) {
-            newPlayers = newPlayers.filter(p => p.id !== senderId);
-            if (!newSpectators.some(s => s.id === senderId)) {
+            newPlayers = newPlayers.filter(p => p.id !== senderId && p.nickname !== nick);
+            if (!newSpectators.some(s => s.id === senderId || s.nickname === nick)) {
               newSpectators.push({ id: senderId, nickname: nick });
             }
           } else {
-            newSpectators = newSpectators.filter(s => s.id !== senderId);
-            const existingIdx = newPlayers.findIndex(p => p.id === senderId);
+            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname !== nick);
+            const existingIdx = newPlayers.findIndex(p => p.id === senderId || p.nickname === nick);
             if (existingIdx >= 0) {
-              // Preserve existing ready state if player already joined!
-              newPlayers[existingIdx].nickname = nick;
+              // Update id/nickname while preserving existing ready state!
+              newPlayers[existingIdx] = {
+                ...newPlayers[existingIdx],
+                id: senderId,
+                nickname: nick
+              };
             } else {
               newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
             }
@@ -97,9 +101,16 @@ export default function App() {
         setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
       } else if (type === 'TOGGLE_READY') {
         if (isHost) {
-          const newPlayers = players.map(p => 
-            p.id === senderId ? { ...p, ready: payload.ready } : p
-          );
+          const targetNick = payload.nickname;
+          const targetId = payload.peerId || senderId;
+
+          const newPlayers = players.map(p => {
+            if (p.id === targetId || p.nickname === targetNick || p.id === senderId) {
+              return { ...p, ready: payload.ready };
+            }
+            return p;
+          });
+
           setPlayers(newPlayers);
           peerManager.send('ROOM_STATE_UPDATE', { players: newPlayers, spectators, settings });
         }
@@ -168,35 +179,38 @@ export default function App() {
   };
 
   const handleToggleReady = () => {
-    const myPlayer = players.find(p => p.id === myPeerId);
+    const myPlayer = players.find(p => p.id === myPeerId || p.nickname === nickname);
     const newReadyState = !myPlayer?.ready;
 
-    const updated = players.map(p => 
-      p.id === myPeerId ? { ...p, ready: newReadyState } : p
-    );
+    const updated = players.map(p => {
+      if (p.id === myPeerId || p.nickname === nickname) {
+        return { ...p, ready: newReadyState };
+      }
+      return p;
+    });
     setPlayers(updated);
 
     if (isHost) {
       peerManager.send('ROOM_STATE_UPDATE', { players: updated, spectators, settings });
     } else {
-      peerManager.send('TOGGLE_READY', { ready: newReadyState });
+      peerManager.send('TOGGLE_READY', { ready: newReadyState, nickname, peerId: myPeerId });
     }
   };
 
   const handleSwitchRole = () => {
-    const isCurrentlyPlayer = players.some(p => p.id === myPeerId);
+    const isCurrentlyPlayer = players.some(p => p.id === myPeerId || p.nickname === nickname);
     let newPlayers = [...players];
     let newSpectators = [...spectators];
 
     if (isCurrentlyPlayer) {
-      newPlayers = newPlayers.filter(p => p.id !== myPeerId);
-      if (!newSpectators.some(s => s.id === myPeerId)) {
+      newPlayers = newPlayers.filter(p => p.id !== myPeerId && p.nickname !== nickname);
+      if (!newSpectators.some(s => s.id === myPeerId || s.nickname === nickname)) {
         newSpectators.push({ id: myPeerId, nickname });
       }
     } else {
       const targetCap = settings.mode === '1v1' ? 2 : settings.mode === 'tournament_4' ? 4 : 8;
       if (newPlayers.length < targetCap) {
-        newSpectators = newSpectators.filter(s => s.id !== myPeerId);
+        newSpectators = newSpectators.filter(s => s.id !== myPeerId && s.nickname !== nickname);
         newPlayers.push({ id: myPeerId, nickname, ready: false, isHost });
       }
     }

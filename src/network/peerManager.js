@@ -11,11 +11,17 @@ class PeerManager {
     this.roomCode = null;
     this.isHost = false;
 
-    // Persistent stable Peer ID per session
-    let savedId = localStorage.getItem('marvel_draft_peerid');
+    // Persistent stable Peer ID per session with safe fallback
+    let savedId = null;
+    try {
+      savedId = localStorage.getItem('marvel_draft_peerid');
+    } catch(e){}
+
     if (!savedId) {
       savedId = `u_${Math.random().toString(36).substring(2, 9)}`;
-      localStorage.setItem('marvel_draft_peerid', savedId);
+      try {
+        localStorage.setItem('marvel_draft_peerid', savedId);
+      } catch(e){}
     }
     this.myPeerId = savedId;
 
@@ -75,7 +81,7 @@ class PeerManager {
     try {
       this.broadcastChannel = new BroadcastChannel(`marvel-draft-${code}`);
       this.broadcastChannel.onmessage = (event) => {
-        if (event.data.senderId !== this.myPeerId && this.onMessageCallback) {
+        if (event?.data?.senderId !== this.myPeerId && this.onMessageCallback) {
           this.onMessageCallback(event.data.type, event.data.payload, event.data.senderId);
         }
       };
@@ -89,7 +95,7 @@ class PeerManager {
     }
     this.isConnected = false;
 
-    this.roomCode = roomCode.toUpperCase().trim();
+    this.roomCode = String(roomCode || '').toUpperCase().trim();
     this.topic = `marvel-draft/room/${this.roomCode}`;
     this.initLocalBroadcast(this.roomCode);
 
@@ -124,7 +130,7 @@ class PeerManager {
           this.updateStatus('Connected 🟢');
           client.subscribe(this.topic, { qos: 1 }, (err) => {
             if (!err) {
-              onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
+              if (onConnected) onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
             }
           });
         });
@@ -132,7 +138,7 @@ class PeerManager {
         client.on('message', (t, msg) => {
           try {
             const data = JSON.parse(msg.toString());
-            if (data.senderId !== this.myPeerId && this.onMessageCallback) {
+            if (data?.senderId !== this.myPeerId && this.onMessageCallback) {
               this.onMessageCallback(data.type, data.payload, data.senderId);
             }
           } catch(e){}
@@ -163,7 +169,7 @@ class PeerManager {
 
       this.peer.on('open', (id) => {
         this.myPeerId = id;
-        localStorage.setItem('marvel_draft_peerid', id);
+        try { localStorage.setItem('marvel_draft_peerid', id); } catch(e){}
         this.isConnected = true;
         this.updateStatus('PeerJS Connected 🟢');
 
@@ -174,14 +180,14 @@ class PeerManager {
             this.setupConn(conn);
           });
         }
-        onConnected({ success: true, roomCode: this.roomCode, peerId: id });
+        if (onConnected) onConnected({ success: true, roomCode: this.roomCode, peerId: id });
       });
 
       this.peer.on('connection', (conn) => {
         this.setupConn(conn);
       });
     } catch(e) {
-      onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
+      if (onConnected) onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
     }
   }
 
@@ -189,7 +195,7 @@ class PeerManager {
     this.connections.set(conn.peer, conn);
     conn.on('data', (data) => {
       if (this.onMessageCallback) {
-        this.onMessageCallback(data.type, data.payload, conn.peer);
+        this.onMessageCallback(data?.type, data?.payload, conn.peer);
       }
     });
   }
@@ -198,7 +204,7 @@ class PeerManager {
     this.isHost = true;
     const code = this.generateRoomCode();
     this.connectMqtt(code, (res) => {
-      onReady(res);
+      if (onReady) onReady(res);
     });
   }
 
@@ -209,9 +215,9 @@ class PeerManager {
         setTimeout(() => {
           this.send('JOIN_ROOM', { nickname, mode, senderId: this.myPeerId });
         }, 250);
-        onResult({ success: true });
+        if (onResult) onResult({ success: true });
       } else {
-        onResult({ success: false });
+        if (onResult) onResult({ success: false });
       }
     });
   }

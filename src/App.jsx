@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MainMenu from './components/MainMenu';
 import MatchSetup from './components/MatchSetup';
 import Lobby from './components/Lobby';
@@ -33,6 +33,8 @@ export default function App() {
 
   const [tournamentState, setTournamentState] = useState(null);
 
+  const hasReceivedRoomState = useRef(false);
+
   // Save nickname locally
   useEffect(() => {
     if (nickname) {
@@ -43,6 +45,11 @@ export default function App() {
   // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
+      // Filter out targeted messages for other peers
+      if (payload?.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
+        return;
+      }
+
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
         if (isHost) {
@@ -59,8 +66,8 @@ export default function App() {
             newSpectators = newSpectators.filter(s => s.id !== senderId);
             const existingIdx = newPlayers.findIndex(p => p.id === senderId);
             if (existingIdx >= 0) {
+              // Preserve existing ready state if player already joined!
               newPlayers[existingIdx].nickname = nick;
-              // Preserve existing ready status!
             } else {
               newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
             }
@@ -77,9 +84,16 @@ export default function App() {
           });
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
-        if (payload.players) setPlayers(payload.players);
-        if (payload.spectators) setSpectators(payload.spectators);
-        if (payload.settings) setSettings(payload.settings);
+        hasReceivedRoomState.current = true;
+        if (payload.players && payload.players.length > 0) {
+          setPlayers(payload.players);
+        }
+        if (payload.spectators) {
+          setSpectators(payload.spectators);
+        }
+        if (payload.settings) {
+          setSettings(payload.settings);
+        }
         setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
       } else if (type === 'TOGGLE_READY') {
         if (isHost) {
@@ -107,12 +121,28 @@ export default function App() {
     });
   }, [isHost, players, spectators, settings]);
 
+  // Client Join Retry loop: retries JOIN_ROOM every 800ms UNTIL initial ROOM_STATE_UPDATE is received
+  useEffect(() => {
+    if (screen !== 'lobby' || isHost || hasReceivedRoomState.current) return;
+
+    const interval = setInterval(() => {
+      if (!hasReceivedRoomState.current) {
+        peerManager.send('JOIN_ROOM', { nickname, mode: 'player' });
+      } else {
+        clearInterval(interval);
+      }
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [screen, isHost, nickname]);
+
   const handleCreateGame = () => {
     setScreen('match_setup');
   };
 
   const handleStartLobby = (newSettings) => {
     setSettings(newSettings);
+    hasReceivedRoomState.current = true;
     peerManager.createRoom(({ success, roomCode: code, peerId }) => {
       if (success) {
         setRoomCode(code);
@@ -128,6 +158,7 @@ export default function App() {
   const handleJoinGame = (code, joinNick, joinMode) => {
     setRoomCode(code);
     setIsHost(false);
+    hasReceivedRoomState.current = false;
     peerManager.joinRoom(code, joinNick, joinMode, ({ success }) => {
       if (success) {
         setMyPeerId(peerManager.myPeerId);

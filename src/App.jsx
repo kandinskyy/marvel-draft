@@ -43,8 +43,8 @@ export default function App() {
   // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
-      // Check target filter if present
-      if (payload.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
+      // Filter out targeted messages for other peers
+      if (payload?.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
         return;
       }
 
@@ -72,18 +72,22 @@ export default function App() {
           setSpectators(newSpectators);
 
           // Broadcast updated room state immediately to everyone
-          const roomStatePayload = {
+          peerManager.send('ROOM_STATE_UPDATE', {
             players: newPlayers,
             spectators: newSpectators,
             settings
-          };
-
-          peerManager.send('ROOM_STATE_UPDATE', roomStatePayload);
+          });
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
-        setPlayers(payload.players || []);
-        setSpectators(payload.spectators || []);
-        if (payload.settings) setSettings(payload.settings);
+        if (payload.players && payload.players.length > 0) {
+          setPlayers(payload.players);
+        }
+        if (payload.spectators) {
+          setSpectators(payload.spectators);
+        }
+        if (payload.settings) {
+          setSettings(payload.settings);
+        }
         setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
       } else if (type === 'START_GAME') {
         if (payload.settings?.mode.startsWith('tournament')) {
@@ -102,6 +106,27 @@ export default function App() {
       }
     });
   }, [isHost, players, spectators, settings]);
+
+  // Periodic Heartbeat Sync (Host broadcasts state, Client retries join)
+  useEffect(() => {
+    if (screen !== 'lobby') return;
+
+    const interval = setInterval(() => {
+      if (isHost) {
+        // Host periodically broadcasts current lobby state every 1.2s
+        peerManager.send('ROOM_STATE_UPDATE', {
+          players,
+          spectators,
+          settings
+        });
+      } else {
+        // Client periodically re-sends JOIN_ROOM until room state updates
+        peerManager.send('JOIN_ROOM', { nickname, mode: 'player' });
+      }
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [screen, isHost, players, spectators, settings, nickname]);
 
   const handleCreateGame = () => {
     setScreen('match_setup');
@@ -127,7 +152,6 @@ export default function App() {
     peerManager.joinRoom(code, joinNick, joinMode, ({ success }) => {
       if (success) {
         setMyPeerId(peerManager.myPeerId);
-        setPlayers([{ id: peerManager.myPeerId, nickname: joinNick, ready: false, isHost: false }]);
         setScreen('lobby');
       }
     });

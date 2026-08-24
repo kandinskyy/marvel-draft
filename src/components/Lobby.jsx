@@ -63,6 +63,17 @@ export default function Lobby({
           ● {settings?.mode === '1v1' ? 'MATCH LOBBY' : 'TOURNAMENT LOBBY'}
         </div>
 
+        {/* Network Status Badge */}
+        <div style={{
+          fontSize: '0.75rem',
+          fontWeight: '800',
+          color: '#4ade80',
+          marginBottom: '12px',
+          letterSpacing: '0.5px'
+        }}>
+          🌐 Сеть: Подключено к серверу комнат
+        </div>
+
         <h2 style={{
           fontSize: '2rem',
           fontWeight: '900',

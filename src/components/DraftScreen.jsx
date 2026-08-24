@@ -10,6 +10,7 @@ export default function DraftScreen({
   roomCode,
   settings, 
   draftState, 
+  disconnectedUser,
   onDraftAction, 
   onSimulateBattle, 
   onLeaveMatch 
@@ -26,6 +27,9 @@ export default function DraftScreen({
 
   // Strict 100% turn determination based exclusively on turnNick
   const isMyTurn = currentTurnNick.trim().toLowerCase() === myNick.trim().toLowerCase();
+
+  const isDisconnectedPlayersTurn = disconnectedUser && 
+    (disconnectedUser.trim().toLowerCase() === currentTurnNick.trim().toLowerCase());
 
   const p1Draft = draftState.p1Draft || {};
   const p2Draft = draftState.p2Draft || {};
@@ -46,6 +50,11 @@ export default function DraftScreen({
   useEffect(() => {
     if (draftFinished || !draftState.turn) return;
 
+    // Freeze 60s timer if disconnected player's turn is active!
+    if (isDisconnectedPlayersTurn) {
+      return;
+    }
+
     setTimeLeft(60);
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
@@ -61,7 +70,7 @@ export default function DraftScreen({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [draftState.turn, draftState.currentStep, draftFinished, isMyTurn, drawnChar]);
+  }, [draftState.turn, draftState.currentStep, draftFinished, isMyTurn, drawnChar, isDisconnectedPlayersTurn]);
 
   const handleTimeoutAutoAction = () => {
     const myDraft = draftState.turn === 1 ? p1Draft : p2Draft;
@@ -214,11 +223,12 @@ export default function DraftScreen({
               padding: '4px 10px',
               borderRadius: '12px',
               background: 'rgba(0,0,0,0.4)',
-              color: timeLeft <= 10 ? '#ef4444' : '#fef08a',
+              color: isDisconnectedPlayersTurn ? '#64748b' : timeLeft <= 10 ? '#ef4444' : '#fef08a',
               fontWeight: '800',
               fontSize: '1rem'
             }}>
-              <Clock size={16} className={timeLeft <= 10 ? 'pulse-glow' : ''} /> {timeLeft}с
+              <Clock size={16} className={timeLeft <= 10 && !isDisconnectedPlayersTurn ? 'pulse-glow' : ''} />
+              {isDisconnectedPlayersTurn ? '❄️ Заморожен (Вылет)' : `${timeLeft}с`}
             </div>
           </div>
         ) : (

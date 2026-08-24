@@ -8,7 +8,7 @@ import TournamentBracket from './components/TournamentBracket';
 import { peerManager } from './network/peerManager';
 
 export default function App() {
-  const [screen, setScreen] = useState('main_menu'); // 'main_menu' | 'match_setup' | 'lobby' | 'draft' | 'battle_sim' | 'tournament' | 'spectator'
+  const [screen, setScreen] = useState('main_menu'); // 'main_menu' | 'match_setup' | 'lobby' | 'draft' | 'battle_sim' | 'tournament'
   const [nickname, setNickname] = useState(localStorage.getItem('marvel_draft_nick') || '');
   const [roomCode, setRoomCode] = useState('');
   const [isHost, setIsHost] = useState(false);
@@ -34,9 +34,10 @@ export default function App() {
   const [tournamentState, setTournamentState] = useState(null);
   const [activeTournamentMatch, setActiveTournamentMatch] = useState(null);
 
-  // 30-Second Reconnection Overlay State
+  // Disconnection & 30-Second Reconnection Overlay State
   const [disconnectedUser, setDisconnectedUser] = useState(null);
   const [reconnectCountdown, setReconnectCountdown] = useState(30);
+  const [forfeitResult, setForfeitResult] = useState(null);
 
   const hasReceivedRoomState = useRef(false);
 
@@ -56,17 +57,28 @@ export default function App() {
         setReconnectCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(timer);
-            setDisconnectedUser(null);
-            setScreen('main_menu');
-            alert(`Игрок ${disconnectedUser} не переподключился. Был зафиксирован технический результат.`);
-            return 30;
+            handleTechnicalForfeit();
+            return 0;
           }
           return prev - 1;
         });
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [disconnectedUser]);
+  }, [disconnectedUser, players, screen]);
+
+  const handleTechnicalForfeit = () => {
+    const remainingPlayer = players.find(p => p.nickname !== disconnectedUser) || players[0];
+    const winnerNick = remainingPlayer?.nickname || 'Оставшийся игрок';
+
+    setForfeitResult({
+      winnerNick,
+      score: '7 : 0',
+      reason: `Игрок ${disconnectedUser} не переподключился за 30 секунд.`
+    });
+
+    setDisconnectedUser(null);
+  };
 
   // Network Message Handler
   useEffect(() => {
@@ -78,8 +90,10 @@ export default function App() {
 
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
+        
+        // Reconnecting Player logic
         if (disconnectedUser === nick) {
-          setDisconnectedUser(null); // Clear disconnect countdown on reconnect!
+          setDisconnectedUser(null);
         }
 
         if (isHost) {
@@ -113,13 +127,10 @@ export default function App() {
           peerManager.send('ROOM_STATE_UPDATE', {
             players: newPlayers,
             spectators: newSpectators,
-            settings
+            settings,
+            currentScreen: screen,
+            draftState
           });
-
-          // If match is currently in progress, send current draftState to reconnecting player!
-          if (screen === 'draft' || screen === 'battle_sim') {
-            peerManager.sendTo(senderId, 'START_GAME', { settings, players: newPlayers, draftState });
-          }
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
         hasReceivedRoomState.current = true;
@@ -132,7 +143,16 @@ export default function App() {
         if (payload.settings) {
           setSettings(payload.settings);
         }
-        setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
+        if (payload.draftState) {
+          setDraftState(payload.draftState);
+        }
+
+        // Direct in-progress match redirection for reconnecting players & spectators!
+        if (payload.currentScreen === 'draft' || payload.currentScreen === 'battle_sim') {
+          setScreen(payload.currentScreen);
+        } else {
+          setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
+        }
       } else if (type === 'TOGGLE_READY') {
         if (isHost) {
           const targetNick = payload.nickname;
@@ -222,7 +242,7 @@ export default function App() {
       if (success) {
         setMyPeerId(peerManager.myPeerId);
         if (joinMode === 'spectator') {
-          setScreen('draft'); // Direct to live spectating view if match in progress
+          setScreen('draft');
         } else {
           setScreen('lobby');
         }
@@ -464,7 +484,7 @@ export default function App() {
             <h3 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#ffffff', marginBottom: '8px' }}>
               Игрок отключился!
             </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '20px' }}>
+            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '16px' }}>
               Игрок <strong style={{ color: '#ef4444' }}>{disconnectedUser}</strong> вышел из игры.
             </p>
 
@@ -472,11 +492,15 @@ export default function App() {
               fontSize: '2rem',
               fontWeight: '900',
               color: '#fef08a',
-              marginBottom: '24px',
+              marginBottom: '20px',
               fontFamily: 'var(--font-heading)'
             }}>
               Переподключение: {reconnectCountdown}с
             </div>
+
+            <p style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '20px' }}>
+              Если ваш ход, вы можете сделать выбор! Если ход соперника, таймер заморожен.
+            </p>
 
             <button
               className="btn-marvel btn-marvel-danger"
@@ -484,6 +508,52 @@ export default function App() {
               style={{ width: '100%', padding: '14px' }}
             >
               Выйти в главное меню
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Technical Forfeit Victory Modal (7:0) */}
+      {forfeitResult && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.9)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 250,
+          padding: '20px'
+        }}>
+          <div className="glass-modal pop-in" style={{
+            width: '100%',
+            maxWidth: '460px',
+            padding: '32px',
+            textAlign: 'center',
+            borderColor: '#22c55e',
+            boxShadow: '0 0 40px rgba(34, 197, 94, 0.4)'
+          }}>
+            <div style={{ fontSize: '3.5rem', marginBottom: '12px' }}>🏆</div>
+            <h2 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#ffffff', marginBottom: '4px' }}>
+              Техническая Победа!
+            </h2>
+            <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#4ade80', marginBottom: '12px' }}>
+              {forfeitResult.score}
+            </div>
+            <p style={{ color: '#fef08a', fontSize: '1.1rem', fontWeight: '800', marginBottom: '12px' }}>
+              Победитель: {forfeitResult.winnerNick}!
+            </p>
+            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '24px' }}>
+              {forfeitResult.reason}
+            </p>
+
+            <button
+              className="btn-marvel btn-marvel-primary"
+              onClick={() => { setForfeitResult(null); setScreen('main_menu'); }}
+              style={{ width: '100%', padding: '14px' }}
+            >
+              Главное меню
             </button>
           </div>
         </div>
@@ -528,6 +598,7 @@ export default function App() {
           roomCode={roomCode}
           settings={settings}
           draftState={draftState}
+          disconnectedUser={disconnectedUser}
           onDraftAction={handleDraftAction}
           onSimulateBattle={handleSimulateBattleTrigger}
           onLeaveMatch={handleLeaveRoom}

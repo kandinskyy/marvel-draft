@@ -56,7 +56,7 @@ class PeerManager {
   }
 
   handleVisibilityChange() {
-    if (this.roomCode && this.mqttClient && !this.isConnected) {
+    if (this.roomCode && (!this.mqttClient || !this.isConnected)) {
       this.connectMqtt(this.roomCode, () => {});
     }
   }
@@ -76,6 +76,14 @@ class PeerManager {
   }
 
   connectMqtt(roomCode, onConnected) {
+    // Always force clean reset of any previous MQTT client
+    if (this.mqttClient) {
+      try { this.mqttClient.end(true); } catch(e){}
+      this.mqttClient = null;
+    }
+    this.isConnected = false;
+    this.myPeerId = `u_${Math.random().toString(36).substring(2, 9)}`;
+
     this.roomCode = roomCode.toUpperCase().trim();
     this.topic = `marvel-draft/room/${this.roomCode}`;
     this.initLocalBroadcast(this.roomCode);
@@ -96,25 +104,27 @@ class PeerManager {
       this.updateStatus('Connecting...');
 
       try {
-        this.mqttClient = mqtt.connect(brokerUrls[idx], {
-          clientId: `mdraft_${this.myPeerId}_${Math.random().toString(36).substring(2, 6)}`,
-          keepalive: 20,
+        const client = mqtt.connect(brokerUrls[idx], {
+          clientId: `mdraft_${Math.random().toString(36).substring(2, 10)}`,
+          keepalive: 15,
           clean: true,
-          reconnectPeriod: 2000,
+          reconnectPeriod: 1000,
           connectTimeout: 4000
         });
 
-        this.mqttClient.on('connect', () => {
+        this.mqttClient = client;
+
+        client.on('connect', () => {
           this.isConnected = true;
           this.updateStatus('Connected 🟢');
-          this.mqttClient.subscribe(this.topic, { qos: 1 }, (err) => {
+          client.subscribe(this.topic, { qos: 1 }, (err) => {
             if (!err) {
               onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
             }
           });
         });
 
-        this.mqttClient.on('message', (t, msg) => {
+        client.on('message', (t, msg) => {
           try {
             const data = JSON.parse(msg.toString());
             if (data.senderId !== this.myPeerId && this.onMessageCallback) {
@@ -123,9 +133,10 @@ class PeerManager {
           } catch(e){}
         });
 
-        this.mqttClient.on('error', (err) => {
+        client.on('error', (err) => {
           console.warn(`MQTT error on ${brokerUrls[idx]}:`, err);
-          try { this.mqttClient.end(); } catch(e){}
+          try { client.end(true); } catch(e){}
+          if (this.mqttClient === client) this.mqttClient = null;
           tryConnect(idx + 1);
         });
 
@@ -191,7 +202,7 @@ class PeerManager {
       if (res.success) {
         setTimeout(() => {
           this.send('JOIN_ROOM', { nickname, mode, senderId: this.myPeerId });
-        }, 200);
+        }, 250);
         onResult({ success: true });
       } else {
         onResult({ success: false });
@@ -238,21 +249,24 @@ class PeerManager {
 
   disconnect(notifyOpponent = false, nickname = '') {
     if (notifyOpponent) {
-      this.send('PLAYER_LEFT', { nickname });
+      try { this.send('PLAYER_LEFT', { nickname }); } catch(e){}
     }
-    setTimeout(() => {
-      if (this.mqttClient) {
-        try { this.mqttClient.end(); } catch(e){}
-      }
-      if (this.peer) {
-        try { this.peer.destroy(); } catch(e){}
-      }
-      if (this.broadcastChannel) {
-        try { this.broadcastChannel.close(); } catch(e){}
-      }
-      this.isConnected = false;
-      this.updateStatus('Disconnected');
-    }, 100);
+    if (this.mqttClient) {
+      try { this.mqttClient.end(true); } catch(e){}
+      this.mqttClient = null;
+    }
+    if (this.peer) {
+      try { this.peer.destroy(); } catch(e){}
+      this.peer = null;
+    }
+    if (this.broadcastChannel) {
+      try { this.broadcastChannel.close(); } catch(e){}
+      this.broadcastChannel = null;
+    }
+    this.isConnected = false;
+    this.roomCode = null;
+    this.topic = null;
+    this.updateStatus('Disconnected');
   }
 }
 

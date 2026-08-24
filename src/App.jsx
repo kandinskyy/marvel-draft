@@ -12,7 +12,7 @@ export default function App() {
   const [nickname, setNickname] = useState(localStorage.getItem('marvel_draft_nick') || '');
   const [roomCode, setRoomCode] = useState('');
   const [isHost, setIsHost] = useState(false);
-  const [myPeerId, setMyPeerId] = useState('');
+  const [myPeerId, setMyPeerId] = useState(peerManager.myPeerId);
   
   const [players, setPlayers] = useState([]);
   const [spectators, setSpectators] = useState([]);
@@ -34,7 +34,7 @@ export default function App() {
   const [tournamentState, setTournamentState] = useState(null);
   const [activeTournamentMatch, setActiveTournamentMatch] = useState(null);
 
-  // Disconnection & 30-Second Reconnection Overlay State
+  // Disconnection & 30-Second Reconnection Top Banner State
   const [disconnectedUser, setDisconnectedUser] = useState(null);
   const [reconnectCountdown, setReconnectCountdown] = useState(30);
   const [forfeitResult, setForfeitResult] = useState(null);
@@ -83,7 +83,6 @@ export default function App() {
   // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
-      // Filter out targeted messages for other peers
       if (payload?.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
         return;
       }
@@ -459,84 +458,64 @@ export default function App() {
 
   return (
     <>
-      {/* 30-Second Disconnect Reconnection Overlay Modal */}
+      {/* Non-Blocking Floating Top Notification Bar for Disconnected Player */}
       {disconnectedUser && (
         <div style={{
           position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.88)',
+          top: '16px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          width: '92%',
+          maxWidth: '680px',
+          padding: '12px 20px',
+          borderRadius: '16px',
+          background: 'rgba(15, 23, 42, 0.96)',
           backdropFilter: 'blur(16px)',
+          border: '1.5px solid #ef4444',
+          boxShadow: '0 10px 30px rgba(239, 68, 68, 0.35)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 200,
-          padding: '20px'
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap'
         }}>
-          <div className="glass-modal pop-in" style={{
-            width: '100%',
-            maxWidth: '460px',
-            padding: '32px',
-            textAlign: 'center',
-            borderColor: '#ef4444',
-            boxShadow: '0 0 40px rgba(239, 68, 68, 0.4)'
-          }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
-            <h3 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#ffffff', marginBottom: '8px' }}>
-              Игрок отключился!
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '16px' }}>
-              Игрок <strong style={{ color: '#ef4444' }}>{disconnectedUser}</strong> вышел из игры.
-            </p>
-
-            <div style={{
-              fontSize: '2rem',
-              fontWeight: '900',
-              color: '#fef08a',
-              marginBottom: '16px',
-              fontFamily: 'var(--font-heading)'
-            }}>
-              Переподключение: {reconnectCountdown}с
-            </div>
-
-            {/* Prominent Room Code Copy Pill inside Disconnect Modal */}
-            {roomCode && (
-              <div 
-                onClick={() => {
-                  navigator.clipboard.writeText(roomCode);
-                  alert(`Код комнаты ${roomCode} скопирован!`);
-                }}
-                style={{
-                  marginBottom: '16px',
-                  padding: '12px 18px',
-                  borderRadius: '16px',
-                  background: 'rgba(9, 12, 25, 0.95)',
-                  border: '2px dashed #eab308',
-                  color: '#fef08a',
-                  fontSize: '0.95rem',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-              >
-                🔑 Код для входа: <span style={{ fontSize: '1.3rem', letterSpacing: '3px', color: '#fff' }}>{roomCode}</span> 📋
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#ffffff' }}>
+                Игрок <span style={{ color: '#ef4444' }}>{disconnectedUser}</span> вылетел!
               </div>
-            )}
-
-            <p style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '20px' }}>
-              Передайте этот код вылетевшему игроку, чтобы он мог сразу вернуться в матч!
-            </p>
-
-            <button
-              className="btn-marvel btn-marvel-danger"
-              onClick={() => { setDisconnectedUser(null); setScreen('main_menu'); }}
-              style={{ width: '100%', padding: '14px' }}
-            >
-              Выйти в главное меню
-            </button>
+              <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                Переподключение: <strong style={{ color: '#fef08a' }}>{reconnectCountdown}с</strong>
+              </div>
+            </div>
           </div>
+
+          {/* Room Code Copy Pill inside Top Bar */}
+          {roomCode && (
+            <div 
+              onClick={() => {
+                navigator.clipboard.writeText(roomCode);
+                alert(`Код комнаты ${roomCode} скопирован в буфер!`);
+              }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '12px',
+                background: 'rgba(234, 179, 8, 0.18)',
+                border: '1px dashed #eab308',
+                color: '#fef08a',
+                fontSize: '0.82rem',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              🔑 Код: <strong>{roomCode}</strong> 📋
+            </div>
+          )}
         </div>
       )}
 

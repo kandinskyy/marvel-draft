@@ -15,6 +15,7 @@ export default function Lobby({
   onStartGame 
 }) {
   const [copied, setCopied] = useState(false);
+  const myNick = localStorage.getItem('marvel_draft_nick') || '';
 
   const copyCode = () => {
     navigator.clipboard.writeText(roomCode);
@@ -23,8 +24,8 @@ export default function Lobby({
   };
 
   const targetPlayerCount = settings?.mode === '1v1' ? 2 : settings?.mode === 'tournament_4' ? 4 : 8;
-  const isPlayer = players.some(p => p.id === myPeerId);
-  const myPlayerObj = players.find(p => p.id === myPeerId);
+  const isPlayer = players.some(p => p.id === myPeerId || (myNick && p.nickname.toLowerCase() === myNick.toLowerCase()));
+  const myPlayerObj = players.find(p => p.id === myPeerId || (myNick && p.nickname.toLowerCase() === myNick.toLowerCase()));
   const isReady = myPlayerObj?.ready || false;
 
   const allPlayersReady = players.length === targetPlayerCount && players.every(p => p.ready);
@@ -166,10 +167,10 @@ export default function Lobby({
                 );
               }
 
-              const isMe = player.id === myPeerId;
+              const isMe = player.id === myPeerId || (myNick && player.nickname.toLowerCase() === myNick.toLowerCase());
 
               return (
-                <div key={player.id} style={{
+                <div key={player.id || idx} style={{
                   padding: '12px 16px',
                   borderRadius: '12px',
                   background: isMe ? 'rgba(229, 9, 20, 0.12)' : 'rgba(255, 255, 255, 0.06)',
@@ -220,7 +221,7 @@ export default function Lobby({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {spectators.map(s => (
                 <span key={s.id} className="marvel-tag" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#67e8f9' }}>
-                  👁️ {s.nickname} {s.id === myPeerId && '(Вы)'}
+                  👁️ {s.nickname} {(s.id === myPeerId || (myNick && s.nickname.toLowerCase() === myNick.toLowerCase())) && '(Вы)'}
                 </span>
               ))}
             </div>

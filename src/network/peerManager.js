@@ -10,9 +10,16 @@ class PeerManager {
     
     this.roomCode = null;
     this.isHost = false;
-    this.myPeerId = `u_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Persistent stable Peer ID per session
+    let savedId = localStorage.getItem('marvel_draft_peerid');
+    if (!savedId) {
+      savedId = `u_${Math.random().toString(36).substring(2, 9)}`;
+      localStorage.setItem('marvel_draft_peerid', savedId);
+    }
+    this.myPeerId = savedId;
+
     this.topic = null;
-    
     this.onMessageCallback = null;
     this.onStatusCallback = null;
     this.broadcastChannel = null;
@@ -76,13 +83,11 @@ class PeerManager {
   }
 
   connectMqtt(roomCode, onConnected) {
-    // Always force clean reset of any previous MQTT client
     if (this.mqttClient) {
       try { this.mqttClient.end(true); } catch(e){}
       this.mqttClient = null;
     }
     this.isConnected = false;
-    this.myPeerId = `u_${Math.random().toString(36).substring(2, 9)}`;
 
     this.roomCode = roomCode.toUpperCase().trim();
     this.topic = `marvel-draft/room/${this.roomCode}`;
@@ -105,7 +110,7 @@ class PeerManager {
 
       try {
         const client = mqtt.connect(brokerUrls[idx], {
-          clientId: `mdraft_${Math.random().toString(36).substring(2, 10)}`,
+          clientId: `mdraft_${this.myPeerId}_${Math.random().toString(36).substring(2, 6)}`,
           keepalive: 15,
           clean: true,
           reconnectPeriod: 1000,
@@ -158,6 +163,7 @@ class PeerManager {
 
       this.peer.on('open', (id) => {
         this.myPeerId = id;
+        localStorage.setItem('marvel_draft_peerid', id);
         this.isConnected = true;
         this.updateStatus('PeerJS Connected 🟢');
 
@@ -252,7 +258,6 @@ class PeerManager {
       try { this.send('PLAYER_LEFT', { nickname }); } catch(e){}
     }
 
-    // 300ms delay to allow WebSocket buffer to flush packet to broker
     setTimeout(() => {
       if (this.mqttClient) {
         try { this.mqttClient.end(true); } catch(e){}

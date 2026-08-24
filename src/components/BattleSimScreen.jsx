@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, FastForward, SkipForward, Trophy, ArrowLeft, ListFilter } from 'lucide-react';
+import { Play, FastForward, SkipForward, Trophy, ArrowLeft, ListFilter, Zap } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getRoleById } from '../data/roles';
 import MatchHistoryModal from './MatchHistoryModal';
@@ -24,6 +24,7 @@ export default function BattleSimScreen({
   const [isSimulating, setIsSimulating] = useState(false);
   const [roundCompleted, setRoundCompleted] = useState(false);
   const [matchCompleted, setMatchCompleted] = useState(false);
+  const [simSpeed, setSimSpeed] = useState(30); // 30 pts per tick (3x faster!)
   
   const [roundHistory, setRoundHistory] = useState([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -42,30 +43,30 @@ export default function BattleSimScreen({
     }
   }, [currentRoundIdx, p1Char, p2Char]);
 
-  // Smooth Tick Down Animation (-10 pts / 10ms = 1000 pts/sec)
+  // Fast Tick Down Animation (-30 pts per 10ms = 3000 pts/sec)
   useEffect(() => {
     let interval = null;
     if (isSimulating && !roundCompleted) {
       interval = setInterval(() => {
         setP1CurrentStat((prev1) => {
-          const next1 = Math.max(0, prev1 - 10);
+          const next1 = Math.max(0, prev1 - simSpeed);
           return next1;
         });
 
         setP2CurrentStat((prev2) => {
-          const next2 = Math.max(0, prev2 - 10);
-          if (next2 === 0 || p1CurrentStat <= 10) {
+          const next2 = Math.max(0, prev2 - simSpeed);
+          if (next2 === 0 || p1CurrentStat <= simSpeed) {
             clearInterval(interval);
             setIsSimulating(false);
             setRoundCompleted(true);
-            resolveRoundOutcome(Math.max(0, p1CurrentStat - 10), next2);
+            resolveRoundOutcome(Math.max(0, p1CurrentStat - simSpeed), next2);
           }
           return next2;
         });
-      }, 15);
+      }, 10);
     }
     return () => clearInterval(interval);
-  }, [isSimulating, roundCompleted, p1CurrentStat]);
+  }, [isSimulating, roundCompleted, p1CurrentStat, simSpeed]);
 
   const resolveRoundOutcome = (finalP1, finalP2) => {
     let winner = 0; // 0 tie, 1 P1, 2 P2
@@ -485,7 +486,8 @@ export default function BattleSimScreen({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '12px'
+        gap: '12px',
+        flexWrap: 'wrap'
       }}>
         {!roundCompleted ? (
           <>
@@ -495,7 +497,7 @@ export default function BattleSimScreen({
               disabled={isSimulating}
               style={{ padding: '14px 28px' }}
             >
-              <Play size={18} /> {isSimulating ? 'Идет бой...' : 'Старт'}
+              <Play size={18} /> {isSimulating ? 'Идет бой...' : 'Быстрый старт'}
             </button>
 
             <button
@@ -523,6 +525,14 @@ export default function BattleSimScreen({
           style={{ padding: '14px 24px' }}
         >
           <SkipForward size={18} /> Пропустить всё
+        </button>
+
+        <button
+          className="btn-marvel btn-marvel-secondary"
+          onClick={() => setSimSpeed(prev => (prev === 30 ? 80 : 30))}
+          style={{ padding: '14px 18px', fontSize: '0.85rem' }}
+        >
+          <Zap size={16} color="#eab308" /> Скорость: {simSpeed === 30 ? '3x ⚡' : 'MAX 🔥'}
         </button>
       </div>
 

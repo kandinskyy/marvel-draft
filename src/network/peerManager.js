@@ -41,10 +41,21 @@ class PeerManager {
     this.roomCode = this.generateRoomCode();
     this.initLocalBroadcast(this.roomCode);
 
+    const peerOptions = {
+      debug: 1,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ]
+      }
+    };
+
     try {
-      this.peer = new Peer(`marvel-draft-${this.roomCode}`, {
-        debug: 1,
-      });
+      this.peer = new Peer(`marvel-draft-${this.roomCode}`, peerOptions);
 
       this.peer.on('open', (id) => {
         this.myPeerId = id;
@@ -56,8 +67,7 @@ class PeerManager {
       });
 
       this.peer.on('error', (err) => {
-        console.warn('PeerJS server error, using fallback local BroadcastChannel:', err);
-        // Fallback works automatically via BroadcastChannel!
+        console.warn('PeerJS server error:', err);
         if (!this.myPeerId) {
           this.myPeerId = `host-${Date.now()}`;
           onReady({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
@@ -74,22 +84,29 @@ class PeerManager {
     this.roomCode = roomCode.toUpperCase().trim();
     this.initLocalBroadcast(this.roomCode);
 
-    let joined = false;
-
-    // Send local Broadcast join attempt immediately
-    setTimeout(() => {
-      this.sendBroadcast('JOIN_ROOM', { nickname, mode, senderId: this.myPeerId });
-    }, 100);
+    const peerOptions = {
+      debug: 1,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ]
+      }
+    };
 
     try {
-      this.peer = new Peer({ debug: 1 });
+      this.peer = new Peer(peerOptions);
 
       this.peer.on('open', (id) => {
         this.myPeerId = id;
-        const conn = this.peer.connect(`marvel-draft-${this.roomCode}`);
+        const conn = this.peer.connect(`marvel-draft-${this.roomCode}`, {
+          reliable: true
+        });
         
         conn.on('open', () => {
-          joined = true;
           this.hostConnection = conn;
           this.setupConnection(conn);
           this.send('JOIN_ROOM', { nickname, mode, senderId: id });
@@ -97,16 +114,9 @@ class PeerManager {
         });
 
         conn.on('error', (err) => {
-          console.warn('Peer connection error, relying on BroadcastChannel fallback:', err);
+          console.warn('Peer connection error:', err);
           onResult({ success: true });
         });
-
-        setTimeout(() => {
-          if (!joined) {
-            // BroadcastChannel connected successfully
-            onResult({ success: true });
-          }
-        }, 1500);
       });
 
       this.peer.on('error', () => {

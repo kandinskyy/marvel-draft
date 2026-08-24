@@ -20,9 +20,11 @@ export default function DraftScreen({
   const totalSlots = activeRoles.length;
 
   const currentTurnPlayer = draftState.turn === 1 ? player1 : player2;
-  const isMyTurn = currentTurnPlayer.id === myPeerId;
+  const isMyTurn = (draftState.turn === 1 && player1.id === myPeerId) || 
+                   (draftState.turn === 2 && player2.id === myPeerId) ||
+                   (currentTurnPlayer?.nickname === localStorage.getItem('marvel_draft_nick'));
 
-  const p1Draft = draftState.p1Draft || {}; // { roleId: charObj }
+  const p1Draft = draftState.p1Draft || {};
   const p2Draft = draftState.p2Draft || {};
 
   const p1Completed = Object.keys(p1Draft).length === totalSlots;
@@ -38,7 +40,6 @@ export default function DraftScreen({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          // Auto fallback if timer runs out!
           if (isMyTurn && drawnChar) {
             autoAssignFirstAvailableRole();
           } else if (isMyTurn && !drawnChar) {
@@ -56,7 +57,6 @@ export default function DraftScreen({
   const handleDrawClick = () => {
     if (!isMyTurn || draftFinished) return;
 
-    // Pick random unassigned character from available pool
     const usedCharIds = new Set([
       ...Object.values(p1Draft).map(c => c.id),
       ...Object.values(p2Draft).map(c => c.id)
@@ -106,18 +106,23 @@ export default function DraftScreen({
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      padding: '16px',
-      position: 'relative'
+      padding: '12px',
+      position: 'relative',
+      maxWidth: '1200px',
+      margin: '0 auto',
+      width: '100%'
     }}>
-      {/* Top Header & Turn Timer */}
+      {/* Responsive Top Header */}
       <div style={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: '20px',
-        background: 'rgba(15, 23, 42, 0.85)',
+        gap: '10px',
+        marginBottom: '16px',
+        background: 'rgba(15, 23, 42, 0.9)',
         backdropFilter: 'blur(12px)',
-        padding: '12px 24px',
+        padding: '12px 16px',
         borderRadius: '16px',
         border: '1px solid rgba(255, 255, 255, 0.12)'
       }}>
@@ -131,18 +136,18 @@ export default function DraftScreen({
 
         {/* Current Turn Indicator & Timer */}
         {!draftFinished ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              padding: '6px 16px',
+              gap: '6px',
+              padding: '6px 14px',
               borderRadius: '20px',
-              background: draftState.turn === 1 ? 'rgba(229, 9, 20, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-              border: `1px solid ${draftState.turn === 1 ? '#ef4444' : '#3b82f6'}`,
+              background: draftState.turn === 1 ? 'rgba(229, 9, 20, 0.25)' : 'rgba(59, 130, 246, 0.25)',
+              border: `1.5px solid ${draftState.turn === 1 ? '#ef4444' : '#3b82f6'}`,
               color: '#ffffff',
               fontWeight: '800',
-              fontSize: '1rem'
+              fontSize: '0.95rem'
             }}>
               ⚡ Ход: {currentTurnPlayer.nickname} {isMyTurn && '(Вы)'}
             </div>
@@ -151,43 +156,46 @@ export default function DraftScreen({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              padding: '4px 10px',
+              borderRadius: '12px',
+              background: 'rgba(0,0,0,0.4)',
               color: timeLeft <= 10 ? '#ef4444' : '#fef08a',
               fontWeight: '800',
-              fontSize: '1.1rem'
+              fontSize: '1rem'
             }}>
-              <Clock size={18} className={timeLeft <= 10 ? 'pulse-glow' : ''} /> {timeLeft}с
+              <Clock size={16} className={timeLeft <= 10 ? 'pulse-glow' : ''} /> {timeLeft}с
             </div>
           </div>
         ) : (
           <div style={{
             color: '#4ade80',
             fontWeight: '900',
-            fontSize: '1.2rem',
+            fontSize: '1.1rem',
             letterSpacing: '1px'
           }}>
-            ✓ ДРАФТ ЗАВЕРШЕН! ГОТОВЫ К БОЮ!
+            ✓ ДРАФТ ЗАВЕРШЕН!
           </div>
         )}
 
-        <div style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '600' }}>
+        <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '600' }}>
           Пропуски: P1 ({draftState.p1Passes}) | P2 ({draftState.p2Passes})
         </div>
       </div>
 
-      {/* Main Draft Board (Player 1 vs Player 2) */}
+      {/* Main Draft Board Grid */}
       <div style={{
         flex: 1,
         display: 'grid',
-        gridTemplateColumns: '1fr auto 1fr',
-        gap: '24px',
-        alignItems: 'center'
+        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: '16px',
+        alignItems: 'start'
       }}>
-        {/* Player 1 Team Slots Column */}
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        {/* Player 1 Team Slots */}
+        <div className="glass-panel" style={{ padding: '16px' }}>
           <h3 style={{
-            fontSize: '1.2rem',
+            fontSize: '1.1rem',
             fontWeight: '900',
-            marginBottom: '14px',
+            marginBottom: '12px',
             color: '#ef4444',
             display: 'flex',
             alignItems: 'center',
@@ -196,53 +204,60 @@ export default function DraftScreen({
             🛡️ {player1.nickname}
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {activeRoles.map(roleId => {
               const role = getRoleById(roleId);
               const char = p1Draft[roleId];
               return (
                 <div key={roleId} style={{
-                  padding: '10px 14px',
-                  borderRadius: '12px',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
                   background: char ? 'rgba(229, 9, 20, 0.12)' : 'rgba(255, 255, 255, 0.04)',
                   border: `1px solid ${char ? 'rgba(229, 9, 20, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px'
+                  gap: '10px'
                 }}>
                   {char ? (
                     <img 
                       src={char.avatar} 
                       alt={char.name} 
-                      style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover' }} 
+                      style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover' }} 
                     />
                   ) : (
                     <div style={{
-                      width: '42px',
-                      height: '42px',
-                      borderRadius: '10px',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
                       background: 'rgba(255, 255, 255, 0.06)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.2rem'
+                      fontSize: '1.1rem'
                     }}>
                       {role.icon}
                     </div>
                   )}
 
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.75rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.7rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
                       {role.name}
                     </div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: '700', color: char ? '#ffffff' : '#64748b' }}>
+                    <div style={{
+                      fontSize: '0.85rem',
+                      fontWeight: '700',
+                      color: char ? '#ffffff' : '#64748b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
                       {char ? char.name : 'Не выбрано'}
                     </div>
                   </div>
 
                   {char && (
-                    <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#fef08a' }}>
-                      {char.stats[roleId]} pts
+                    <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fef08a' }}>
+                      {char.stats[roleId]}
                     </div>
                   )}
                 </div>
@@ -251,15 +266,16 @@ export default function DraftScreen({
           </div>
         </div>
 
-        {/* Center Action (Draw Button or Simulate Battle Button) */}
+        {/* Center Action (Draw / Simulate Button) */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '16px'
+          gap: '12px',
+          padding: '12px 0'
         }}>
           <div style={{
-            fontSize: '2rem',
+            fontSize: '1.8rem',
             fontWeight: '900',
             color: '#eab308',
             fontFamily: 'var(--font-heading)'
@@ -273,35 +289,39 @@ export default function DraftScreen({
               disabled={!isMyTurn || !!drawnChar}
               onClick={handleDrawClick}
               style={{
-                padding: '20px 32px',
-                fontSize: '1.2rem',
+                width: '100%',
+                maxWidth: '280px',
+                padding: '16px 24px',
+                fontSize: '1.1rem',
                 borderRadius: '16px'
               }}
             >
-              <Sparkles size={24} /> {isMyTurn ? 'Взять карту' : `Ход ${currentTurnPlayer.nickname}`}
+              <Sparkles size={20} /> {isMyTurn ? 'Взять карту' : `Ход ${currentTurnPlayer.nickname}`}
             </button>
           ) : (
             <button
               className="btn-marvel btn-marvel-primary pop-in"
               onClick={onSimulateBattle}
               style={{
-                padding: '22px 36px',
-                fontSize: '1.3rem',
-                borderRadius: '18px',
+                width: '100%',
+                maxWidth: '280px',
+                padding: '18px 24px',
+                fontSize: '1.15rem',
+                borderRadius: '16px',
                 boxShadow: '0 0 30px rgba(229, 9, 20, 0.6)'
               }}
             >
-              <Play size={26} /> ⚔️ Симулировать сражение
+              <Play size={22} /> ⚔️ Симулировать сражение
             </button>
           )}
         </div>
 
-        {/* Player 2 Team Slots Column */}
-        <div className="glass-panel" style={{ padding: '20px' }}>
+        {/* Player 2 Team Slots */}
+        <div className="glass-panel" style={{ padding: '16px' }}>
           <h3 style={{
-            fontSize: '1.2rem',
+            fontSize: '1.1rem',
             fontWeight: '900',
-            marginBottom: '14px',
+            marginBottom: '12px',
             color: '#3b82f6',
             display: 'flex',
             alignItems: 'center',
@@ -310,53 +330,60 @@ export default function DraftScreen({
             🛡️ {player2.nickname}
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {activeRoles.map(roleId => {
               const role = getRoleById(roleId);
               const char = p2Draft[roleId];
               return (
                 <div key={roleId} style={{
-                  padding: '10px 14px',
-                  borderRadius: '12px',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
                   background: char ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.04)',
                   border: `1px solid ${char ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px'
+                  gap: '10px'
                 }}>
                   {char ? (
                     <img 
                       src={char.avatar} 
                       alt={char.name} 
-                      style={{ width: '42px', height: '42px', borderRadius: '10px', objectFit: 'cover' }} 
+                      style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover' }} 
                     />
                   ) : (
                     <div style={{
-                      width: '42px',
-                      height: '42px',
-                      borderRadius: '10px',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
                       background: 'rgba(255, 255, 255, 0.06)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '1.2rem'
+                      fontSize: '1.1rem'
                     }}>
                       {role.icon}
                     </div>
                   )}
 
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.75rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.7rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
                       {role.name}
                     </div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: '700', color: char ? '#ffffff' : '#64748b' }}>
+                    <div style={{
+                      fontSize: '0.85rem',
+                      fontWeight: '700',
+                      color: char ? '#ffffff' : '#64748b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
                       {char ? char.name : 'Не выбрано'}
                     </div>
                   </div>
 
                   {char && (
-                    <div style={{ fontSize: '0.85rem', fontWeight: '900', color: '#fef08a' }}>
-                      {char.stats[roleId]} pts
+                    <div style={{ fontSize: '0.8rem', fontWeight: '900', color: '#fef08a' }}>
+                      {char.stats[roleId]}
                     </div>
                   )}
                 </div>
@@ -366,7 +393,7 @@ export default function DraftScreen({
         </div>
       </div>
 
-      {/* Drawn Character & Role Assignment Modal */}
+      {/* Character Role Selection Modal */}
       {drawnChar && isMyTurn && (
         <div style={{
           position: 'fixed',
@@ -377,19 +404,21 @@ export default function DraftScreen({
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 100,
-          padding: '20px'
+          padding: '16px'
         }}>
           <div className="glass-modal pop-in" style={{
             width: '100%',
-            maxWidth: '480px',
-            padding: '32px',
-            textAlign: 'center'
+            maxWidth: '440px',
+            padding: '24px 20px',
+            textAlign: 'center',
+            maxHeight: '90vh',
+            overflowY: 'auto'
           }}>
             <div style={{
-              width: '110px',
-              height: '110px',
+              width: '90px',
+              height: '90px',
               borderRadius: '50%',
-              margin: '0 auto 16px',
+              margin: '0 auto 12px',
               border: '3px solid #eab308',
               overflow: 'hidden',
               boxShadow: '0 0 25px rgba(234, 179, 8, 0.4)'
@@ -401,32 +430,32 @@ export default function DraftScreen({
               />
             </div>
 
-            <h3 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#ffffff', marginBottom: '4px' }}>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: '900', color: '#ffffff', marginBottom: '2px' }}>
               {drawnChar.name}
             </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '14px' }}>
+            <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '12px' }}>
               {drawnChar.origName}
             </p>
 
             {/* Tags */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', flexWrap: 'wrap', marginBottom: '16px' }}>
               {drawnChar.tags.map(tag => (
-                <span key={tag} className="marvel-tag">
+                <span key={tag} className="marvel-tag" style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
                   {tag}
                 </span>
               ))}
             </div>
 
-            <p style={{ fontSize: '0.9rem', color: '#fef08a', fontWeight: '700', marginBottom: '14px' }}>
-              Назначьте роль для {drawnChar.name}:
+            <p style={{ fontSize: '0.85rem', color: '#fef08a', fontWeight: '700', marginBottom: '12px' }}>
+              Выберите роль для персонажа:
             </p>
 
             {/* Role Buttons Grid */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
-              gap: '10px',
-              marginBottom: '20px'
+              gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
+              gap: '8px',
+              marginBottom: '16px'
             }}>
               {activeRoles.map(roleId => {
                 const role = getRoleById(roleId);
@@ -440,16 +469,16 @@ export default function DraftScreen({
                     className="btn-marvel btn-marvel-secondary"
                     onClick={() => handleAssignRole(roleId)}
                     style={{
-                      padding: '12px 8px',
+                      padding: '10px 6px',
                       flexDirection: 'column',
-                      gap: '4px',
+                      gap: '2px',
                       borderColor: isTaken ? 'rgba(255,255,255,0.05)' : role.color,
                       opacity: isTaken ? 0.3 : 1
                     }}
                   >
-                    <span style={{ fontSize: '1.1rem' }}>{role.icon}</span>
-                    <span style={{ fontSize: '0.8rem', fontWeight: '800' }}>{role.name}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#fef08a', fontWeight: '700' }}>
+                    <span style={{ fontSize: '1rem' }}>{role.icon}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '800' }}>{role.name}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#fef08a', fontWeight: '700' }}>
                       {drawnChar.stats[roleId]} pts
                     </span>
                   </button>
@@ -462,9 +491,9 @@ export default function DraftScreen({
               className="btn-marvel btn-marvel-gold"
               disabled={currentPassesLeft <= 0}
               onClick={handlePass}
-              style={{ width: '100%', padding: '14px' }}
+              style={{ width: '100%', padding: '12px', fontSize: '0.95rem' }}
             >
-              <SkipForward size={18} /> Пропустить героя ({currentPassesLeft} осталось)
+              <SkipForward size={16} /> Пропустить ({currentPassesLeft} осталось)
             </button>
           </div>
         </div>

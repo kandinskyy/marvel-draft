@@ -66,7 +66,6 @@ export default function App() {
             newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname !== nick);
             const existingIdx = newPlayers.findIndex(p => p.id === senderId || p.nickname === nick);
             if (existingIdx >= 0) {
-              // Update id/nickname while preserving existing ready state!
               newPlayers[existingIdx] = {
                 ...newPlayers[existingIdx],
                 id: senderId,
@@ -115,11 +114,13 @@ export default function App() {
           peerManager.send('ROOM_STATE_UPDATE', { players: newPlayers, spectators, settings });
         }
       } else if (type === 'START_GAME') {
+        if (payload.draftState) {
+          setDraftState(payload.draftState);
+        }
         if (payload.settings?.mode.startsWith('tournament')) {
           initTournamentState(payload.players, payload.settings);
           setScreen('tournament');
         } else {
-          initDraftState(payload.settings);
           setScreen('draft');
         }
       } else if (type === 'DRAFT_STATE_UPDATE') {
@@ -231,20 +232,9 @@ export default function App() {
   };
 
   const handleStartGame = () => {
-    peerManager.send('START_GAME', { settings, players });
-    if (settings.mode.startsWith('tournament')) {
-      initTournamentState(players, settings);
-      setScreen('tournament');
-    } else {
-      initDraftState(settings);
-      setScreen('draft');
-    }
-  };
-
-  const initDraftState = (currentSettings) => {
-    const pCount = currentSettings.passes || 1;
+    const pCount = settings.passes || 1;
     const initialDraft = {
-      turn: Math.random() < 0.5 ? 1 : 2,
+      turn: Math.random() < 0.5 ? 1 : 2, // Host determines synchronized randomized first turn!
       p1Draft: {},
       p2Draft: {},
       p1Passes: pCount,
@@ -252,6 +242,27 @@ export default function App() {
       currentStep: 0
     };
     setDraftState(initialDraft);
+
+    peerManager.send('START_GAME', { settings, players, draftState: initialDraft });
+
+    if (settings.mode.startsWith('tournament')) {
+      initTournamentState(players, settings);
+      setScreen('tournament');
+    } else {
+      setScreen('draft');
+    }
+  };
+
+  const initDraftState = (currentSettings) => {
+    const pCount = currentSettings.passes || 1;
+    return {
+      turn: Math.random() < 0.5 ? 1 : 2,
+      p1Draft: {},
+      p2Draft: {},
+      p1Passes: pCount,
+      p2Passes: pCount,
+      currentStep: 0
+    };
   };
 
   const initTournamentState = (currentPlayers, currentSettings) => {
@@ -318,7 +329,8 @@ export default function App() {
     setTournamentState({ ...tournamentState, matches: updatedMatches });
 
     if (currentMatch && currentMatch.readyIds.length >= 2) {
-      initDraftState(settings);
+      const initialDraft = initDraftState(settings);
+      setDraftState(initialDraft);
       setScreen('draft');
     }
   };

@@ -1,18 +1,17 @@
-import Peer from 'peerjs';
+import mqtt from 'mqtt';
 
 class PeerManager {
   constructor() {
-    this.peer = null;
-    this.connections = new Map(); // peerId -> connection
-    this.hostConnection = null;
+    this.client = null;
     this.roomCode = null;
     this.isHost = false;
-    this.myPeerId = null;
-    this.broadcastChannel = null;
+    this.myPeerId = `user_${Math.random().toString(36).substring(2, 9)}`;
+    this.topic = null;
     this.onMessageCallback = null;
     this.onConnectCallback = null;
     this.onDisconnectCallback = null;
-    this.statusText = 'Disconnected';
+    this.broadcastChannel = null;
+    this.isConnected = false;
   }
 
   generateRoomCode() {
@@ -24,16 +23,6 @@ class PeerManager {
     return code;
   }
 
-  getIceServers() {
-    return [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' }
-    ];
-  }
-
   initLocalBroadcast(code) {
     if (this.broadcastChannel) {
       try { this.broadcastChannel.close(); } catch(e){}
@@ -41,180 +30,120 @@ class PeerManager {
     try {
       this.broadcastChannel = new BroadcastChannel(`marvel-draft-${code}`);
       this.broadcastChannel.onmessage = (event) => {
-        if (this.onMessageCallback) {
+        if (event.data.senderId !== this.myPeerId && this.onMessageCallback) {
           this.onMessageCallback(event.data.type, event.data.payload, event.data.senderId);
         }
       };
     } catch(e){}
   }
 
-  createRoom(onReady) {
-    this.isHost = true;
-    this.roomCode = this.generateRoomCode();
+  connectMqtt(roomCode, onConnected) {
+    this.roomCode = roomCode.toUpperCase().trim();
+    this.topic = `marvel-draft/room/${this.roomCode}`;
     this.initLocalBroadcast(this.roomCode);
 
-    const targetPeerId = `MDRAFT-${this.roomCode}`;
+    // Public WebSocket brokers for instant cross-device connectivity
+    const brokerUrls = [
+      'wss://broker.hivemq.com:8000/mqtt',
+      'wss://broker.emqx.io:8084/mqtt',
+      'wss://test.mosquitto.org:8081'
+    ];
 
-    try {
-      this.peer = new Peer(targetPeerId, {
-        debug: 1,
-        config: {
-          iceServers: this.getIceServers()
-        }
-      });
+    const connectToBroker = (urlIndex = 0) => {
+      if (urlIndex >= brokerUrls.length) {
+        console.warn('All MQTT brokers failed, relying on BroadcastChannel');
+        onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
+        return;
+      }
 
-      this.peer.on('open', (id) => {
-        this.myPeerId = id;
-        this.statusText = 'Room Created';
-        onReady({ success: true, roomCode: this.roomCode, peerId: id });
-      });
+      const brokerUrl = brokerUrls[urlIndex];
+      try {
+        this.client = mqtt.connect(brokerUrl, {
+          clientId: `marvel_${this.myPeerId}_${Math.random().toString(36).substring(2, 6)}`,
+          keepalive: 30,
+          clean: true,
+          reconnectPeriod: 2000,
+          connectTimeout: 5000
+        });
 
-      this.peer.on('connection', (conn) => {
-        this.setupConnection(conn);
-      });
+        this.client.on('connect', () => {
+          this.isConnected = true;
+          this.client.subscribe(this.topic, { qos: 1 }, (err) => {
+            if (!err) {
+              onConnected({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
+            }
+          });
+        });
 
-      this.peer.on('error', (err) => {
-        console.warn('PeerJS Host Error:', err);
-        this.statusText = `Error: ${err.type || err.message}`;
-        if (!this.myPeerId) {
-          // If custom ID taken or failed, retry with random ID + alias fallback
-          this.myPeerId = `MDRAFT-${this.roomCode}`;
-          onReady({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
-        }
-      });
-    } catch (e) {
-      console.error('PeerJS create exception:', e);
-      this.myPeerId = `MDRAFT-${this.roomCode}`;
-      onReady({ success: true, roomCode: this.roomCode, peerId: this.myPeerId });
-    }
+        this.client.on('message', (topic, message) => {
+          try {
+            const data = JSON.parse(message.toString());
+            // Ignore messages sent by ourselves
+            if (data.senderId !== this.myPeerId && this.onMessageCallback) {
+              this.onMessageCallback(data.type, data.payload, data.senderId);
+            }
+          } catch(e){}
+        });
+
+        this.client.on('error', (err) => {
+          console.warn(`MQTT broker ${brokerUrl} error:`, err);
+          try { this.client.end(); } catch(e){}
+          connectToBroker(urlIndex + 1);
+        });
+
+      } catch(e) {
+        connectToBroker(urlIndex + 1);
+      }
+    };
+
+    connectToBroker(0);
+  }
+
+  createRoom(onReady) {
+    this.isHost = true;
+    const code = this.generateRoomCode();
+    this.connectMqtt(code, (res) => {
+      onReady(res);
+    });
   }
 
   joinRoom(roomCode, nickname, mode = 'player', onResult) {
     this.isHost = false;
-    this.roomCode = roomCode.toUpperCase().trim();
-    this.initLocalBroadcast(this.roomCode);
-
-    const targetHostPeerId = `MDRAFT-${this.roomCode}`;
-
-    try {
-      this.peer = new Peer({
-        debug: 1,
-        config: {
-          iceServers: this.getIceServers()
-        }
-      });
-
-      let hasResponded = false;
-
-      this.peer.on('open', (id) => {
-        this.myPeerId = id;
-        
-        const conn = this.peer.connect(targetHostPeerId, {
-          reliable: true
-        });
-
-        conn.on('open', () => {
-          hasResponded = true;
-          this.hostConnection = conn;
-          this.setupConnection(conn);
-          
-          // Send join room request
-          this.send('JOIN_ROOM', { nickname, mode, senderId: id });
-          onResult({ success: true });
-        });
-
-        conn.on('error', (err) => {
-          console.warn('Peer Join Error:', err);
-          if (!hasResponded) {
-            hasResponded = true;
-            onResult({ success: false, error: 'Could not connect to room host' });
-          }
-        });
-
-        // Fallback timeout if WebRTC handshake hangs
+    this.connectMqtt(roomCode, (res) => {
+      if (res.success) {
+        // Send JOIN_ROOM message to host
         setTimeout(() => {
-          if (!hasResponded) {
-            hasResponded = true;
-            // Send via BroadcastChannel fallback
-            this.sendBroadcast('JOIN_ROOM', { nickname, mode, senderId: id });
-            onResult({ success: true });
-          }
-        }, 3000);
-      });
-
-      this.peer.on('error', (err) => {
-        console.warn('Peer Client Error:', err);
-        if (!hasResponded) {
-          hasResponded = true;
-          this.sendBroadcast('JOIN_ROOM', { nickname, mode, senderId: this.myPeerId || `client-${Date.now()}` });
-          onResult({ success: true });
-        }
-      });
-    } catch (e) {
-      console.error('PeerJS join exception:', e);
-      onResult({ success: false, error: e.message });
-    }
-  }
-
-  setupConnection(conn) {
-    const peerId = conn.peer;
-    this.connections.set(peerId, conn);
-
-    if (this.onConnectCallback) {
-      this.onConnectCallback(peerId);
-    }
-
-    conn.on('data', (data) => {
-      if (this.onMessageCallback) {
-        this.onMessageCallback(data.type, data.payload, peerId);
-      }
-    });
-
-    conn.on('close', () => {
-      this.connections.delete(peerId);
-      if (this.onDisconnectCallback) {
-        this.onDisconnectCallback(peerId);
+          this.send('JOIN_ROOM', { nickname, mode, senderId: this.myPeerId });
+        }, 300);
+        onResult({ success: true });
+      } else {
+        onResult({ success: false });
       }
     });
   }
 
   send(type, payload = {}) {
-    const msg = { type, payload, senderId: this.myPeerId };
+    const msgObj = { type, payload, senderId: this.myPeerId };
+    const msgString = JSON.stringify(msgObj);
 
-    // 1. Direct WebRTC send to connections
-    if (this.isHost) {
-      this.connections.forEach((conn) => {
-        if (conn && conn.open) {
-          try { conn.send(msg); } catch(e){}
-        }
-      });
-    } else if (this.hostConnection && this.hostConnection.open) {
-      try { this.hostConnection.send(msg); } catch(e){}
+    // Send via MQTT WebSocket broker
+    if (this.client && this.isConnected) {
+      try {
+        this.client.publish(this.topic, msgString, { qos: 1 });
+      } catch(e){}
     }
 
-    // 2. BroadcastChannel send for local multi-tab testing
-    this.sendBroadcast(type, payload);
-  }
-
-  sendTo(peerId, type, payload = {}) {
-    const conn = this.connections.get(peerId);
-    if (conn && conn.open) {
+    // Also send via local BroadcastChannel for same-device multi-tab testing
+    if (this.broadcastChannel) {
       try {
-        conn.send({ type, payload, senderId: this.myPeerId });
+        this.broadcastChannel.postMessage(msgObj);
       } catch(e){}
     }
   }
 
-  sendBroadcast(type, payload) {
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage({
-          type,
-          payload,
-          senderId: this.myPeerId
-        });
-      } catch (e) {}
-    }
+  sendTo(targetPeerId, type, payload = {}) {
+    // In MQTT pub/sub room topic, send with targetPeerId field
+    this.send(type, { ...payload, targetPeerId });
   }
 
   setMessageHandler(cb) {
@@ -230,14 +159,13 @@ class PeerManager {
   }
 
   disconnect() {
-    if (this.peer) {
-      try { this.peer.destroy(); } catch(e){}
+    if (this.client) {
+      try { this.client.end(); } catch(e){}
     }
     if (this.broadcastChannel) {
       try { this.broadcastChannel.close(); } catch(e){}
     }
-    this.connections.clear();
-    this.hostConnection = null;
+    this.isConnected = false;
   }
 }
 

@@ -40,9 +40,14 @@ export default function App() {
     }
   }, [nickname]);
 
-  // Network Message Dispatcher
+  // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
+      // Check target filter if present
+      if (payload.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
+        return;
+      }
+
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
         if (isHost) {
@@ -66,7 +71,7 @@ export default function App() {
           setPlayers(newPlayers);
           setSpectators(newSpectators);
 
-          // Broadcast updated state to all connected peers
+          // Broadcast updated room state immediately to everyone
           const roomStatePayload = {
             players: newPlayers,
             spectators: newSpectators,
@@ -74,7 +79,6 @@ export default function App() {
           };
 
           peerManager.send('ROOM_STATE_UPDATE', roomStatePayload);
-          peerManager.sendTo(senderId, 'ROOM_STATE_UPDATE', roomStatePayload);
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
         setPlayers(payload.players || []);
@@ -123,6 +127,7 @@ export default function App() {
     peerManager.joinRoom(code, joinNick, joinMode, ({ success }) => {
       if (success) {
         setMyPeerId(peerManager.myPeerId);
+        setPlayers([{ id: peerManager.myPeerId, nickname: joinNick, ready: false, isHost: false }]);
         setScreen('lobby');
       }
     });
@@ -163,6 +168,8 @@ export default function App() {
 
     if (isHost) {
       peerManager.send('ROOM_STATE_UPDATE', { players: newPlayers, spectators: newSpectators, settings });
+    } else {
+      peerManager.send('JOIN_ROOM', { nickname, mode: isCurrentlyPlayer ? 'spectator' : 'player' });
     }
   };
 

@@ -28,7 +28,8 @@ export default function Lobby({
   const myPlayerObj = players.find(p => p.id === myPeerId || (myNick && p.nickname.toLowerCase() === myNick.toLowerCase()));
   const isReady = myPlayerObj?.ready || false;
 
-  const allPlayersReady = players.length === targetPlayerCount && players.every(p => p.ready);
+  const isLobbyFull = players.length >= targetPlayerCount;
+  const allPlayersReady = isLobbyFull && players.every(p => p.ready);
 
   return (
     <div style={{
@@ -269,10 +270,21 @@ export default function Lobby({
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               className="btn-marvel btn-marvel-secondary"
+              disabled={!isPlayer && isLobbyFull}
               onClick={onSwitchRole}
-              style={{ flex: 1, padding: '12px', fontSize: '0.85rem' }}
+              style={{
+                flex: 1,
+                padding: '12px',
+                fontSize: '0.85rem',
+                opacity: (!isPlayer && isLobbyFull) ? 0.4 : 1,
+                cursor: (!isPlayer && isLobbyFull) ? 'not-allowed' : 'pointer'
+              }}
             >
-              {isPlayer ? '👁️ Перейти в зрители' : '⚔️ Перейти в игроки'}
+              {isPlayer 
+                ? '👁️ Перейти в зрители' 
+                : isLobbyFull 
+                ? '🔒 Слоты игроков заполнены' 
+                : '⚔️ Перейти в игроки'}
             </button>
 
             <button

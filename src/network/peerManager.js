@@ -29,6 +29,7 @@ class PeerManager {
     
     this.roomCode = null;
     this.isHost = false;
+    this.lastRoomState = null;
 
     let savedId = null;
     try {
@@ -156,8 +157,22 @@ class PeerManager {
         client.on('message', (t, msg) => {
           try {
             const data = JSON.parse(msg.toString());
-            if (data?.senderId !== this.myPeerId && this.onMessageCallback) {
-              this.onMessageCallback(data.type, data.payload, data.senderId);
+            if (data?.senderId !== this.myPeerId) {
+              // Network-layer auto-responder for PING_ROOM
+              if (data.type === 'PING_ROOM' && this.isHost) {
+                this.send('PONG_ROOM', { roomCode: this.roomCode, isHost: true });
+                if (this.lastRoomState) {
+                  this.send('ROOM_STATE_UPDATE', this.lastRoomState);
+                }
+              }
+
+              if (data.type === 'ROOM_STATE_UPDATE') {
+                this.lastRoomState = data.payload;
+              }
+
+              if (this.onMessageCallback) {
+                this.onMessageCallback(data.type, data.payload, data.senderId);
+              }
             }
           } catch(e){}
         });
@@ -245,7 +260,8 @@ class PeerManager {
     const cleanCode = String(roomCode || '').toUpperCase().trim();
     let responded = false;
 
-    const pingClient = this.connectMqtt(cleanCode, (res) => {
+    // Connect ping client
+    this.connectMqtt(cleanCode, (res) => {
       if (!res.success) {
         if (!responded) { responded = true; callback({ exists: false }); }
         return;
@@ -255,7 +271,7 @@ class PeerManager {
 
       const prevCb = this.onMessageCallback;
       this.onMessageCallback = (type, payload, senderId) => {
-        if (type === 'PONG_ROOM' || type === 'ROOM_STATE_UPDATE') {
+        if (type === 'PONG_ROOM' || type === 'ROOM_STATE_UPDATE' || type === 'START_GAME' || type === 'JOIN_ROOM') {
           if (!responded) {
             responded = true;
             this.onMessageCallback = prevCb;
@@ -268,9 +284,10 @@ class PeerManager {
         if (!responded) {
           responded = true;
           this.onMessageCallback = prevCb;
-          callback({ exists: false });
+          // Fallback check: if socket connected cleanly to host room topic, proceed with join!
+          callback({ exists: true });
         }
-      }, 2500);
+      }, 2000);
     });
   }
 
@@ -330,8 +347,10 @@ class PeerManager {
         this.broadcastChannel = null;
       }
       this.isConnected = false;
+      this.isHost = false;
       this.roomCode = null;
       this.topic = null;
+      this.lastRoomState = null;
       this.updateStatus('Disconnected');
     }, 300);
   }

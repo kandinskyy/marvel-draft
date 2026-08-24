@@ -43,11 +43,6 @@ export default function App() {
   // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
-      // Filter out targeted messages for other peers
-      if (payload?.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
-        return;
-      }
-
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
         if (isHost) {
@@ -56,13 +51,16 @@ export default function App() {
           let newSpectators = [...spectators];
 
           if (pMode === 'spectator' || newPlayers.length >= targetCap) {
+            newPlayers = newPlayers.filter(p => p.id !== senderId);
             if (!newSpectators.some(s => s.id === senderId)) {
               newSpectators.push({ id: senderId, nickname: nick });
             }
           } else {
+            newSpectators = newSpectators.filter(s => s.id !== senderId);
             const existingIdx = newPlayers.findIndex(p => p.id === senderId);
             if (existingIdx >= 0) {
               newPlayers[existingIdx].nickname = nick;
+              // Preserve existing ready status!
             } else {
               newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
             }
@@ -79,16 +77,18 @@ export default function App() {
           });
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
-        if (payload.players && payload.players.length > 0) {
-          setPlayers(payload.players);
-        }
-        if (payload.spectators) {
-          setSpectators(payload.spectators);
-        }
-        if (payload.settings) {
-          setSettings(payload.settings);
-        }
+        if (payload.players) setPlayers(payload.players);
+        if (payload.spectators) setSpectators(payload.spectators);
+        if (payload.settings) setSettings(payload.settings);
         setScreen(prev => (prev === 'main_menu' ? 'lobby' : prev));
+      } else if (type === 'TOGGLE_READY') {
+        if (isHost) {
+          const newPlayers = players.map(p => 
+            p.id === senderId ? { ...p, ready: payload.ready } : p
+          );
+          setPlayers(newPlayers);
+          peerManager.send('ROOM_STATE_UPDATE', { players: newPlayers, spectators, settings });
+        }
       } else if (type === 'START_GAME') {
         if (payload.settings?.mode.startsWith('tournament')) {
           initTournamentState(payload.players, payload.settings);
@@ -106,27 +106,6 @@ export default function App() {
       }
     });
   }, [isHost, players, spectators, settings]);
-
-  // Periodic Heartbeat Sync (Host broadcasts state, Client retries join)
-  useEffect(() => {
-    if (screen !== 'lobby') return;
-
-    const interval = setInterval(() => {
-      if (isHost) {
-        // Host periodically broadcasts current lobby state every 1.2s
-        peerManager.send('ROOM_STATE_UPDATE', {
-          players,
-          spectators,
-          settings
-        });
-      } else {
-        // Client periodically re-sends JOIN_ROOM until room state updates
-        peerManager.send('JOIN_ROOM', { nickname, mode: 'player' });
-      }
-    }, 1200);
-
-    return () => clearInterval(interval);
-  }, [screen, isHost, players, spectators, settings, nickname]);
 
   const handleCreateGame = () => {
     setScreen('match_setup');
@@ -158,14 +137,18 @@ export default function App() {
   };
 
   const handleToggleReady = () => {
+    const myPlayer = players.find(p => p.id === myPeerId);
+    const newReadyState = !myPlayer?.ready;
+
     const updated = players.map(p => 
-      p.id === myPeerId ? { ...p, ready: !p.ready } : p
+      p.id === myPeerId ? { ...p, ready: newReadyState } : p
     );
     setPlayers(updated);
+
     if (isHost) {
       peerManager.send('ROOM_STATE_UPDATE', { players: updated, spectators, settings });
     } else {
-      peerManager.send('JOIN_ROOM', { nickname, mode: 'player' });
+      peerManager.send('TOGGLE_READY', { ready: newReadyState });
     }
   };
 

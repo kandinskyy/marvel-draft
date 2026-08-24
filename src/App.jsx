@@ -492,14 +492,41 @@ export default function App() {
               fontSize: '2rem',
               fontWeight: '900',
               color: '#fef08a',
-              marginBottom: '20px',
+              marginBottom: '16px',
               fontFamily: 'var(--font-heading)'
             }}>
               Переподключение: {reconnectCountdown}с
             </div>
 
+            {/* Prominent Room Code Copy Pill inside Disconnect Modal */}
+            {roomCode && (
+              <div 
+                onClick={() => {
+                  navigator.clipboard.writeText(roomCode);
+                  alert(`Код комнаты ${roomCode} скопирован!`);
+                }}
+                style={{
+                  marginBottom: '16px',
+                  padding: '12px 18px',
+                  borderRadius: '16px',
+                  background: 'rgba(9, 12, 25, 0.95)',
+                  border: '2px dashed #eab308',
+                  color: '#fef08a',
+                  fontSize: '0.95rem',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                🔑 Код для входа: <span style={{ fontSize: '1.3rem', letterSpacing: '3px', color: '#fff' }}>{roomCode}</span> 📋
+              </div>
+            )}
+
             <p style={{ fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '20px' }}>
-              Если ваш ход, вы можете сделать выбор! Если ход соперника, таймер заморожен.
+              Передайте этот код вылетевшему игроку, чтобы он мог сразу вернуться в матч!
             </p>
 
             <button

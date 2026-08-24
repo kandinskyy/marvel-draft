@@ -6,9 +6,9 @@ export default function Lobby({
   roomCode, 
   isHost, 
   myPeerId, 
-  players, 
-  spectators, 
-  settings, 
+  players = [], 
+  spectators = [], 
+  settings = {}, 
   onToggleReady, 
   onSwitchRole, 
   onLeaveRoom, 
@@ -18,18 +18,30 @@ export default function Lobby({
   const myNick = localStorage.getItem('marvel_draft_nick') || '';
 
   const copyCode = () => {
+    if (!roomCode) return;
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const targetPlayerCount = settings?.mode === '1v1' ? 2 : settings?.mode === 'tournament_4' ? 4 : 8;
-  const isPlayer = players.some(p => p.id === myPeerId || (myNick && p.nickname.toLowerCase() === myNick.toLowerCase()));
-  const myPlayerObj = players.find(p => p.id === myPeerId || (myNick && p.nickname.toLowerCase() === myNick.toLowerCase()));
+
+  const isMe = (p) => {
+    if (!p) return false;
+    if (p.id && myPeerId && p.id === myPeerId) return true;
+    if (p.nickname && myNick && String(p.nickname).toLowerCase().trim() === String(myNick).toLowerCase().trim()) return true;
+    return false;
+  };
+
+  const safePlayers = Array.isArray(players) ? players : [];
+  const safeSpectators = Array.isArray(spectators) ? spectators : [];
+
+  const isPlayer = safePlayers.some(isMe);
+  const myPlayerObj = safePlayers.find(isMe);
   const isReady = myPlayerObj?.ready || false;
 
-  const isLobbyFull = players.length >= targetPlayerCount;
-  const allPlayersReady = isLobbyFull && players.every(p => p.ready);
+  const isLobbyFull = safePlayers.length >= targetPlayerCount;
+  const allPlayersReady = isLobbyFull && safePlayers.every(p => p?.ready);
 
   return (
     <div style={{
@@ -86,7 +98,7 @@ export default function Lobby({
         </h2>
         
         <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '24px' }}>
-          Присоединилось игроков: <strong style={{ color: '#ffffff' }}>{players.length} / {targetPlayerCount}</strong>
+          Присоединилось игроков: <strong style={{ color: '#ffffff' }}>{safePlayers.length} / {targetPlayerCount}</strong>
         </p>
 
         {/* Room Code Display Pill */}
@@ -116,7 +128,7 @@ export default function Lobby({
             color: '#fef08a',
             fontFamily: 'var(--font-heading)'
           }}>
-            {roomCode}
+            {roomCode || '------'}
           </div>
           <div style={{
             display: 'flex',
@@ -143,12 +155,12 @@ export default function Lobby({
             alignItems: 'center',
             gap: '6px'
           }}>
-            <Users size={16} color="var(--primary)" /> Игроки ({players.length}/{targetPlayerCount})
+            <Users size={16} color="var(--primary)" /> Игроки ({safePlayers.length}/{targetPlayerCount})
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {Array.from({ length: targetPlayerCount }).map((_, idx) => {
-              const player = players[idx];
+              const player = safePlayers[idx];
               if (!player) {
                 return (
                   <div key={idx} style={{
@@ -168,14 +180,14 @@ export default function Lobby({
                 );
               }
 
-              const isMe = player.id === myPeerId || (myNick && player.nickname.toLowerCase() === myNick.toLowerCase());
+              const me = isMe(player);
 
               return (
                 <div key={player.id || idx} style={{
                   padding: '12px 16px',
                   borderRadius: '12px',
-                  background: isMe ? 'rgba(229, 9, 20, 0.12)' : 'rgba(255, 255, 255, 0.06)',
-                  border: `1px solid ${isMe ? 'rgba(229, 9, 20, 0.4)' : 'rgba(255, 255, 255, 0.12)'}`,
+                  background: me ? 'rgba(229, 9, 20, 0.12)' : 'rgba(255, 255, 255, 0.06)',
+                  border: `1px solid ${me ? 'rgba(229, 9, 20, 0.4)' : 'rgba(255, 255, 255, 0.12)'}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between'
@@ -183,7 +195,7 @@ export default function Lobby({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {player.isHost && <Crown size={18} color="#eab308" />}
                     <span style={{ fontWeight: '700', fontSize: '1rem', color: '#ffffff' }}>
-                      {player.nickname} {isMe && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>(Вы)</span>}
+                      {player.nickname || 'Безымянный'} {me && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>(Вы)</span>}
                     </span>
                   </div>
 
@@ -205,7 +217,7 @@ export default function Lobby({
         </div>
 
         {/* Spectators List */}
-        {spectators && spectators.length > 0 && (
+        {safeSpectators.length > 0 && (
           <div style={{ textAlign: 'left', marginBottom: '24px' }}>
             <div style={{
               fontSize: '0.85rem',
@@ -217,12 +229,12 @@ export default function Lobby({
               alignItems: 'center',
               gap: '6px'
             }}>
-              <Eye size={16} color="#06b6d4" /> Зрители ({spectators.length})
+              <Eye size={16} color="#06b6d4" /> Зрители ({safeSpectators.length})
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {spectators.map(s => (
-                <span key={s.id} className="marvel-tag" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#67e8f9' }}>
-                  👁️ {s.nickname} {(s.id === myPeerId || (myNick && s.nickname.toLowerCase() === myNick.toLowerCase())) && '(Вы)'}
+              {safeSpectators.map((s, idx) => (
+                <span key={s.id || idx} className="marvel-tag" style={{ background: 'rgba(6, 182, 212, 0.15)', color: '#67e8f9' }}>
+                  👁️ {s.nickname || 'Зритель'} {isMe(s) && '(Вы)'}
                 </span>
               ))}
             </div>
@@ -240,8 +252,8 @@ export default function Lobby({
           textAlign: 'left'
         }}>
           <div><strong>Формат:</strong> {settings?.mode === '1v1' ? '1 на 1' : settings?.mode === 'tournament_4' ? 'Турнир (4 игрока)' : 'Турнир (8 игроков)'}</div>
-          <div><strong>Роли:</strong> {settings?.roles?.map(rId => getRoleById(rId)?.name).join(', ')}</div>
-          <div><strong>Пропуски:</strong> {settings?.passes} на игрока</div>
+          <div><strong>Роли:</strong> {settings?.roles?.map(rId => getRoleById(rId)?.name).filter(Boolean).join(', ')}</div>
+          <div><strong>Пропуски:</strong> {settings?.passes || 1} на игрока</div>
         </div>
 
         {/* Action Controls */}

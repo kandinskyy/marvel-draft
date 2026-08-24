@@ -7,12 +7,71 @@ import BattleSimScreen from './components/BattleSimScreen';
 import TournamentBracket from './components/TournamentBracket';
 import { peerManager } from './network/peerManager';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("React Error Boundary Caught:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          textAlign: 'center',
+          color: '#ffffff'
+        }}>
+          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
+          <h2 style={{ fontSize: '1.8rem', fontWeight: '900', marginBottom: '8px' }}>Произошла ошибка интерфейса</h2>
+          <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '24px', maxWidth: '400px' }}>
+            {this.state.error?.message || 'Непредвиденный сбой отображения'}
+          </p>
+          <button
+            className="btn-marvel btn-marvel-primary"
+            onClick={() => window.location.reload()}
+            style={{ padding: '12px 24px' }}
+          >
+            Перезагрузить страницу
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const safeStrEqual = (a, b) => {
+  if (!a || !b) return false;
+  return String(a).toLowerCase().trim() === String(b).toLowerCase().trim();
+};
+
 export default function App() {
-  const [screen, setScreen] = useState('main_menu'); // 'main_menu' | 'match_setup' | 'lobby' | 'draft' | 'battle_sim' | 'tournament'
-  const [nickname, setNickname] = useState(localStorage.getItem('marvel_draft_nick') || '');
+  return (
+    <ErrorBoundary>
+      <MainAppContent />
+    </ErrorBoundary>
+  );
+}
+
+function MainAppContent() {
+  const [screen, setScreen] = useState('main_menu');
+  const [nickname, setNickname] = useState(() => localStorage.getItem('marvel_draft_nick') || '');
   const [roomCode, setRoomCode] = useState('');
   const [isHost, setIsHost] = useState(false);
-  const [myPeerId, setMyPeerId] = useState(peerManager.myPeerId);
+  const [myPeerId, setMyPeerId] = useState(() => peerManager.myPeerId);
   
   const [players, setPlayers] = useState([]);
   const [spectators, setSpectators] = useState([]);
@@ -41,14 +100,12 @@ export default function App() {
 
   const hasReceivedRoomState = useRef(false);
 
-  // Save nickname locally
   useEffect(() => {
     if (nickname) {
       localStorage.setItem('marvel_draft_nick', nickname);
     }
   }, [nickname]);
 
-  // 30-Second Reconnection Countdown Interval
   useEffect(() => {
     let timer = null;
     if (disconnectedUser) {
@@ -68,7 +125,7 @@ export default function App() {
   }, [disconnectedUser, players, screen]);
 
   const handleTechnicalForfeit = () => {
-    const remainingPlayer = players.find(p => p.nickname !== disconnectedUser) || players[0];
+    const remainingPlayer = players.find(p => !safeStrEqual(p?.nickname, disconnectedUser)) || players[0];
     const winnerNick = remainingPlayer?.nickname || 'Оставшийся игрок';
 
     setForfeitResult({
@@ -80,7 +137,6 @@ export default function App() {
     setDisconnectedUser(null);
   };
 
-  // Network Message Handler
   useEffect(() => {
     peerManager.setMessageHandler((type, payload, senderId) => {
       if (payload?.targetPeerId && payload.targetPeerId !== peerManager.myPeerId) {
@@ -90,41 +146,36 @@ export default function App() {
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
         
-        // Reconnecting Player logic
-        if (disconnectedUser === nick) {
+        if (safeStrEqual(disconnectedUser, nick)) {
           setDisconnectedUser(null);
         }
 
         if (isHost) {
-          const targetCap = settings.mode === '1v1' ? 2 : settings.mode === 'tournament_4' ? 4 : 8;
+          const targetCap = settings?.mode === '1v1' ? 2 : settings?.mode === 'tournament_4' ? 4 : 8;
           let newPlayers = [...players];
           let newSpectators = [...spectators];
 
-          const existingIdx = newPlayers.findIndex(p => p.id === senderId || (nick && p.nickname.toLowerCase() === nick.toLowerCase()));
+          const existingIdx = newPlayers.findIndex(p => p.id === senderId || safeStrEqual(p.nickname, nick));
 
           if (existingIdx >= 0) {
-            // Player already in players array: update ID and Nickname, NEVER move to spectators!
             newPlayers[existingIdx] = {
               ...newPlayers[existingIdx],
               id: senderId,
               nickname: nick
             };
-            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname.toLowerCase() !== nick.toLowerCase());
+            newSpectators = newSpectators.filter(s => s.id !== senderId && !safeStrEqual(s.nickname, nick));
           } else if (pMode === 'spectator' || newPlayers.length >= targetCap) {
-            // New participant, but room full or requested spectator mode
-            if (!newSpectators.some(s => s.id === senderId || s.nickname.toLowerCase() === nick.toLowerCase())) {
+            if (!newSpectators.some(s => s.id === senderId || safeStrEqual(s.nickname, nick))) {
               newSpectators.push({ id: senderId, nickname: nick });
             }
           } else {
-            // New participant: add as player
-            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname.toLowerCase() !== nick.toLowerCase());
+            newSpectators = newSpectators.filter(s => s.id !== senderId && !safeStrEqual(s.nickname, nick));
             newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
           }
 
           setPlayers(newPlayers);
           setSpectators(newSpectators);
 
-          // Broadcast updated room state immediately to everyone
           peerManager.send('ROOM_STATE_UPDATE', {
             players: newPlayers,
             spectators: newSpectators,
@@ -148,7 +199,6 @@ export default function App() {
           setDraftState(payload.draftState);
         }
 
-        // Direct in-progress match redirection for reconnecting players & spectators!
         if (payload.currentScreen === 'draft' || payload.currentScreen === 'battle_sim') {
           setScreen(payload.currentScreen);
         } else {
@@ -160,7 +210,7 @@ export default function App() {
           const targetId = payload.peerId || senderId;
 
           const newPlayers = players.map(p => {
-            if (p.id === targetId || (targetNick && p.nickname.toLowerCase() === targetNick.toLowerCase()) || p.id === senderId) {
+            if (p.id === targetId || safeStrEqual(p.nickname, targetNick) || p.id === senderId) {
               return { ...p, ready: payload.ready };
             }
             return p;
@@ -173,7 +223,7 @@ export default function App() {
         if (payload.draftState) {
           setDraftState(payload.draftState);
         }
-        if (payload.settings?.mode.startsWith('tournament')) {
+        if (payload.settings?.mode?.startsWith('tournament')) {
           initTournamentState(payload.players, payload.settings);
           setScreen('tournament');
         } else {
@@ -201,7 +251,6 @@ export default function App() {
     });
   }, [isHost, players, spectators, settings, disconnectedUser, screen, draftState]);
 
-  // Client Join Retry loop: retries JOIN_ROOM every 800ms UNTIL initial ROOM_STATE_UPDATE is received
   useEffect(() => {
     if (screen !== 'lobby' || isHost || hasReceivedRoomState.current) return;
 
@@ -252,11 +301,11 @@ export default function App() {
   };
 
   const handleToggleReady = () => {
-    const myPlayer = players.find(p => p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase()));
+    const myPlayer = players.find(p => p.id === myPeerId || safeStrEqual(p.nickname, nickname));
     const newReadyState = !myPlayer?.ready;
 
     const updated = players.map(p => {
-      if (p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase())) {
+      if (p.id === myPeerId || safeStrEqual(p.nickname, nickname)) {
         return { ...p, ready: newReadyState };
       }
       return p;
@@ -271,19 +320,19 @@ export default function App() {
   };
 
   const handleSwitchRole = () => {
-    const isCurrentlyPlayer = players.some(p => p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase()));
+    const isCurrentlyPlayer = players.some(p => p.id === myPeerId || safeStrEqual(p.nickname, nickname));
     let newPlayers = [...players];
     let newSpectators = [...spectators];
 
     if (isCurrentlyPlayer) {
-      newPlayers = newPlayers.filter(p => p.id !== myPeerId && p.nickname.toLowerCase() !== nickname.toLowerCase());
-      if (!newSpectators.some(s => s.id === myPeerId || s.nickname.toLowerCase() === nickname.toLowerCase())) {
+      newPlayers = newPlayers.filter(p => p.id !== myPeerId && !safeStrEqual(p.nickname, nickname));
+      if (!newSpectators.some(s => s.id === myPeerId || safeStrEqual(s.nickname, nickname))) {
         newSpectators.push({ id: myPeerId, nickname });
       }
     } else {
-      const targetCap = settings.mode === '1v1' ? 2 : settings.mode === 'tournament_4' ? 4 : 8;
+      const targetCap = settings?.mode === '1v1' ? 2 : settings?.mode === 'tournament_4' ? 4 : 8;
       if (newPlayers.length < targetCap) {
-        newSpectators = newSpectators.filter(s => s.id !== myPeerId && s.nickname.toLowerCase() !== nickname.toLowerCase());
+        newSpectators = newSpectators.filter(s => s.id !== myPeerId && !safeStrEqual(s.nickname, nickname));
         newPlayers.push({ id: myPeerId, nickname, ready: false, isHost });
       }
     }
@@ -304,7 +353,7 @@ export default function App() {
   };
 
   const handleStartGame = () => {
-    const pCount = settings.passes || 1;
+    const pCount = settings?.passes || 1;
     const p1Nick = players[0]?.nickname || 'Игрок 1';
     const p2Nick = players[1]?.nickname || 'Игрок 2';
 
@@ -324,7 +373,7 @@ export default function App() {
 
     peerManager.send('START_GAME', { settings, players, draftState: initialDraft });
 
-    if (settings.mode.startsWith('tournament')) {
+    if (settings?.mode?.startsWith('tournament')) {
       initTournamentState(players, settings);
       setScreen('tournament');
     } else {
@@ -333,7 +382,7 @@ export default function App() {
   };
 
   const createFreshDraftState = (currentSettings, p1Nick, p2Nick) => {
-    const pCount = currentSettings.passes || 1;
+    const pCount = currentSettings?.passes || 1;
     const firstTurn = Math.random() < 0.5 ? 1 : 2;
     const firstTurnNick = firstTurn === 1 ? p1Nick : p2Nick;
 
@@ -349,7 +398,7 @@ export default function App() {
   };
 
   const initTournamentState = (currentPlayers, currentSettings) => {
-    const totalCount = currentSettings.mode === 'tournament_4' ? 4 : 8;
+    const totalCount = currentSettings?.mode === 'tournament_4' ? 4 : 8;
     const totalRounds = totalCount === 4 ? 2 : 3;
 
     const matches = [];

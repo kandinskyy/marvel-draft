@@ -4,12 +4,12 @@ import { MARVEL_CHARACTERS } from '../data/marvelCharacters';
 import { getRoleById } from '../data/roles';
 
 export default function DraftScreen({ 
-  player1, 
-  player2, 
+  player1 = {}, 
+  player2 = {}, 
   myPeerId, 
   roomCode,
   settings, 
-  draftState, 
+  draftState = {}, 
   disconnectedUser,
   onDraftAction, 
   onSimulateBattle, 
@@ -22,17 +22,24 @@ export default function DraftScreen({
   const activeRoles = settings?.roles || ['captain', 'strength', 'intelligence', 'magic', 'ranged', 'agility', 'sum'];
   const totalSlots = activeRoles.length;
 
-  const currentTurnNick = draftState.turnNick || (draftState.turn === 1 ? player1.nickname : player2.nickname);
+  const currentTurnNick = draftState?.turnNick || (draftState?.turn === 1 ? player1?.nickname : player2?.nickname) || '';
   const myNick = localStorage.getItem('marvel_draft_nick') || '';
 
-  // Strict 100% turn determination based exclusively on turnNick
-  const isMyTurn = currentTurnNick.trim().toLowerCase() === myNick.trim().toLowerCase();
+  // Strict 100% null-safe turn determination
+  const isMyTurn = Boolean(
+    currentTurnNick && 
+    myNick && 
+    String(currentTurnNick).trim().toLowerCase() === String(myNick).trim().toLowerCase()
+  );
 
-  const isDisconnectedPlayersTurn = disconnectedUser && 
-    (disconnectedUser.trim().toLowerCase() === currentTurnNick.trim().toLowerCase());
+  const isDisconnectedPlayersTurn = Boolean(
+    disconnectedUser && 
+    currentTurnNick && 
+    String(disconnectedUser).trim().toLowerCase() === String(currentTurnNick).trim().toLowerCase()
+  );
 
-  const p1Draft = draftState.p1Draft || {};
-  const p2Draft = draftState.p2Draft || {};
+  const p1Draft = draftState?.p1Draft || {};
+  const p2Draft = draftState?.p2Draft || {};
 
   const p1Completed = Object.keys(p1Draft).length === totalSlots;
   const p2Completed = Object.keys(p2Draft).length === totalSlots;
@@ -48,9 +55,8 @@ export default function DraftScreen({
 
   // 60s Turn Timer with Auto-Draw & Random Role Placement on Timeout
   useEffect(() => {
-    if (draftFinished || !draftState.turn) return;
+    if (draftFinished || !draftState?.turn) return;
 
-    // Freeze 60s timer if disconnected player's turn is active!
     if (isDisconnectedPlayersTurn) {
       return;
     }
@@ -70,10 +76,10 @@ export default function DraftScreen({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [draftState.turn, draftState.currentStep, draftFinished, isMyTurn, drawnChar, isDisconnectedPlayersTurn]);
+  }, [draftState?.turn, draftState?.currentStep, draftFinished, isMyTurn, drawnChar, isDisconnectedPlayersTurn]);
 
   const handleTimeoutAutoAction = () => {
-    const myDraft = draftState.turn === 1 ? p1Draft : p2Draft;
+    const myDraft = draftState?.turn === 1 ? p1Draft : p2Draft;
     const freeRoles = activeRoles.filter(rId => !myDraft[rId]);
     if (freeRoles.length === 0) return;
 
@@ -82,8 +88,8 @@ export default function DraftScreen({
     let charToAssign = drawnChar;
     if (!charToAssign) {
       const usedCharIds = new Set([
-        ...Object.values(p1Draft).map(c => c.id),
-        ...Object.values(p2Draft).map(c => c.id)
+        ...Object.values(p1Draft).map(c => c?.id).filter(Boolean),
+        ...Object.values(p2Draft).map(c => c?.id).filter(Boolean)
       ]);
       const availablePool = MARVEL_CHARACTERS.filter(c => !usedCharIds.has(c.id));
       if (availablePool.length > 0) {
@@ -105,8 +111,8 @@ export default function DraftScreen({
     if (!isMyTurn || draftFinished) return;
 
     const usedCharIds = new Set([
-      ...Object.values(p1Draft).map(c => c.id),
-      ...Object.values(p2Draft).map(c => c.id)
+      ...Object.values(p1Draft).map(c => c?.id).filter(Boolean),
+      ...Object.values(p2Draft).map(c => c?.id).filter(Boolean)
     ]);
     const availablePool = MARVEL_CHARACTERS.filter(c => !usedCharIds.has(c.id));
 
@@ -130,14 +136,14 @@ export default function DraftScreen({
   };
 
   const handlePass = () => {
-    const myPasses = draftState.turn === 1 ? draftState.p1Passes : draftState.p2Passes;
+    const myPasses = draftState?.turn === 1 ? draftState?.p1Passes : draftState?.p2Passes;
     if (!isMyTurn || myPasses <= 0) return;
 
     onDraftAction('PASS_CHAR', { playerTurn: draftState.turn });
     setDrawnChar(null);
   };
 
-  const currentPassesLeft = draftState.turn === 1 ? draftState.p1Passes : draftState.p2Passes;
+  const currentPassesLeft = draftState?.turn === 1 ? draftState?.p1Passes : draftState?.p2Passes;
 
   return (
     <div style={{
@@ -213,7 +219,7 @@ export default function DraftScreen({
               fontWeight: '800',
               fontSize: '0.95rem'
             }}>
-              ⚡ Ход: {currentTurnNick} {isMyTurn && '(Вы)'}
+              ⚡ Ход: {currentTurnNick || '...'} {isMyTurn && '(Вы)'}
             </div>
 
             <div style={{
@@ -243,7 +249,7 @@ export default function DraftScreen({
         )}
 
         <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '600' }}>
-          Пропуски: P1 ({draftState.p1Passes}) | P2 ({draftState.p2Passes})
+          Пропуски: P1 ({draftState?.p1Passes || 0}) | P2 ({draftState?.p2Passes || 0})
         </div>
       </div>
 
@@ -266,7 +272,7 @@ export default function DraftScreen({
             alignItems: 'center',
             gap: '8px'
           }}>
-            🛡️ {player1.nickname}
+            🛡️ {player1?.nickname || 'Игрок 1'}
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -300,13 +306,13 @@ export default function DraftScreen({
                       justifyContent: 'center',
                       fontSize: '1.1rem'
                     }}>
-                      {role.icon}
+                      {role?.icon || '🛡️'}
                     </div>
                   )}
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.7rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
-                      {role.name}
+                    <div style={{ fontSize: '0.7rem', color: role?.color || '#fff', fontWeight: '800', textTransform: 'uppercase' }}>
+                      {role?.name || roleId}
                     </div>
                     <div style={{
                       fontSize: '0.85rem',
@@ -392,7 +398,7 @@ export default function DraftScreen({
             alignItems: 'center',
             gap: '8px'
           }}>
-            🛡️ {player2.nickname}
+            🛡️ {player2?.nickname || 'Игрок 2'}
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -426,13 +432,13 @@ export default function DraftScreen({
                       justifyContent: 'center',
                       fontSize: '1.1rem'
                     }}>
-                      {role.icon}
+                      {role?.icon || '🛡️'}
                     </div>
                   )}
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.7rem', color: role.color, fontWeight: '800', textTransform: 'uppercase' }}>
-                      {role.name}
+                    <div style={{ fontSize: '0.7rem', color: role?.color || '#fff', fontWeight: '800', textTransform: 'uppercase' }}>
+                      {role?.name || roleId}
                     </div>
                     <div style={{
                       fontSize: '0.85rem',
@@ -524,7 +530,7 @@ export default function DraftScreen({
             }}>
               {activeRoles.map(roleId => {
                 const role = getRoleById(roleId);
-                const myDraft = draftState.turn === 1 ? p1Draft : p2Draft;
+                const myDraft = draftState?.turn === 1 ? p1Draft : p2Draft;
                 const isTaken = !!myDraft[roleId];
 
                 return (
@@ -537,12 +543,12 @@ export default function DraftScreen({
                       padding: '10px 6px',
                       flexDirection: 'column',
                       gap: '2px',
-                      borderColor: isTaken ? 'rgba(255,255,255,0.05)' : role.color,
+                      borderColor: isTaken ? 'rgba(255,255,255,0.05)' : role?.color || '#fff',
                       opacity: isTaken ? 0.3 : 1
                     }}
                   >
-                    <span style={{ fontSize: '1rem' }}>{role.icon}</span>
-                    <span style={{ fontSize: '0.75rem', fontWeight: '800' }}>{role.name}</span>
+                    <span style={{ fontSize: '1rem' }}>{role?.icon || '🛡️'}</span>
+                    <span style={{ fontSize: '0.75rem', fontWeight: '800' }}>{role?.name || roleId}</span>
                     <span style={{ fontSize: '0.7rem', color: '#fef08a', fontWeight: '700' }}>
                       {drawnChar.stats[roleId]} pts
                     </span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Users, Trophy, Play, ArrowLeft, Eye } from 'lucide-react';
+import { Shield, Users, Play, ArrowLeft, Eye } from 'lucide-react';
 
 export default function MainMenu({ 
   nickname, 

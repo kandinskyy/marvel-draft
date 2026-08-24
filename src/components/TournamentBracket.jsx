@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trophy, Check, Eye, ArrowLeft, Users, Play } from 'lucide-react';
+import { Trophy, ArrowLeft } from 'lucide-react';
 import SpectatorView from './SpectatorView';
 import MatchHistoryModal from './MatchHistoryModal';
 
@@ -12,7 +12,7 @@ export default function TournamentBracket({
   const [selectedSpectateMatch, setSelectedSpectateMatch] = useState(null);
   const [selectedHistoryMatch, setSelectedHistoryMatch] = useState(null);
 
-  const { matches = [], currentRound = 1, totalRounds = 2 } = tournament;
+  const { matches = [], totalRounds = 2 } = tournament;
 
   // Find user's current upcoming match
   const myMatch = matches.find(m => 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, ArrowLeft, Shield } from 'lucide-react';
+import { Eye, ArrowLeft } from 'lucide-react';
 import { getRoleById } from '../data/roles';
 
 export default function SpectatorView({ matchData, onBack }) {

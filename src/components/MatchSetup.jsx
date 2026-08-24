@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Check, Shield, Trophy, Users, Layers, SkipForward } from 'lucide-react';
+import { ArrowLeft, Check, Shield, Trophy, Users, SkipForward } from 'lucide-react';
 import { ALL_ROLES } from '../data/roles';
 
 export default function MatchSetup({ onStartLobby, onBack }) {

@@ -5,7 +5,6 @@ import Lobby from './components/Lobby';
 import DraftScreen from './components/DraftScreen';
 import BattleSimScreen from './components/BattleSimScreen';
 import TournamentBracket from './components/TournamentBracket';
-import SpectatorView from './components/SpectatorView';
 import { peerManager } from './network/peerManager';
 
 export default function App() {

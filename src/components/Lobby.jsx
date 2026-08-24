@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Users, Eye, Crown, LogOut, Play, Shield, ArrowLeft } from 'lucide-react';
+import { Copy, Check, Users, Eye, Crown, LogOut, Play } from 'lucide-react';
 import { getRoleById } from '../data/roles';
 
 export default function Lobby({ 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, FastForward, SkipForward, Trophy, ArrowLeft, RotateCcw, ListFilter } from 'lucide-react';
+import { Play, FastForward, SkipForward, Trophy, ArrowLeft, ListFilter } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { getRoleById } from '../data/roles';
 import MatchHistoryModal from './MatchHistoryModal';
@@ -36,8 +36,8 @@ export default function BattleSimScreen({
   // Setup current round stats
   useEffect(() => {
     if (p1Char && p2Char && !roundCompleted) {
-      setP1CurrentStat(p1Char.stats[activeRoleId]);
-      setP2CurrentStat(p2Char.stats[activeRoleId]);
+      setP1CurrentStat(p1Char.stats[activeRoleId] || 0);
+      setP2CurrentStat(p2Char.stats[activeRoleId] || 0);
     }
   }, [currentRoundIdx, p1Char, p2Char]);
 
@@ -47,25 +47,24 @@ export default function BattleSimScreen({
     if (isSimulating && !roundCompleted) {
       interval = setInterval(() => {
         setP1CurrentStat((prev1) => {
-          setP2CurrentStat((prev2) => {
-            const next1 = Math.max(0, prev1 - 10);
-            const next2 = Math.max(0, prev2 - 10);
-
-            if (next1 === 0 || next2 === 0) {
-              clearInterval(interval);
-              setIsSimulating(false);
-              setRoundCompleted(true);
-              resolveRoundOutcome(next1, next2);
-            }
-
-            return next2;
-          });
-          return Math.max(0, prev1 - 10);
+          const next1 = Math.max(0, prev1 - 10);
+          return next1;
         });
-      }, 10);
+
+        setP2CurrentStat((prev2) => {
+          const next2 = Math.max(0, prev2 - 10);
+          if (next2 === 0 || p1CurrentStat <= 10) {
+            clearInterval(interval);
+            setIsSimulating(false);
+            setRoundCompleted(true);
+            resolveRoundOutcome(Math.max(0, p1CurrentStat - 10), next2);
+          }
+          return next2;
+        });
+      }, 15);
     }
     return () => clearInterval(interval);
-  }, [isSimulating, roundCompleted]);
+  }, [isSimulating, roundCompleted, p1CurrentStat]);
 
   const resolveRoundOutcome = (finalP1, finalP2) => {
     let winner = 0; // 0 tie, 1 P1, 2 P2
@@ -77,8 +76,8 @@ export default function BattleSimScreen({
       setP2Score(s => s + 1);
     }
 
-    const p1Init = p1Char.stats[activeRoleId];
-    const p2Init = p2Char.stats[activeRoleId];
+    const p1Init = p1Char?.stats[activeRoleId] || 0;
+    const p2Init = p2Char?.stats[activeRoleId] || 0;
 
     setRoundHistory(prev => [
       ...prev,
@@ -105,8 +104,8 @@ export default function BattleSimScreen({
     if (roundCompleted) return;
     setIsSimulating(false);
     
-    const p1Init = p1Char.stats[activeRoleId];
-    const p2Init = p2Char.stats[activeRoleId];
+    const p1Init = p1Char?.stats[activeRoleId] || 0;
+    const p2Init = p2Char?.stats[activeRoleId] || 0;
 
     let finalP1 = 0;
     let finalP2 = 0;
@@ -150,8 +149,8 @@ export default function BattleSimScreen({
       const rId = roles[i];
       const char1 = p1Draft[rId];
       const char2 = p2Draft[rId];
-      const init1 = char1.stats[rId];
-      const init2 = char2.stats[rId];
+      const init1 = char1?.stats[rId] || 0;
+      const init2 = char2?.stats[rId] || 0;
 
       let f1 = 0, f2 = 0, win = 0;
       if (init1 > init2) {
@@ -323,7 +322,7 @@ export default function BattleSimScreen({
           alignItems: 'center'
         }}>
           {/* Player 1 Hero Fighter */}
-          <div style={{ textAlgin: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{
               width: '130px',
               height: '130px',
@@ -371,7 +370,7 @@ export default function BattleSimScreen({
           </div>
 
           {/* Player 2 Hero Fighter */}
-          <div style={{ textAlgin: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{
               width: '130px',
               height: '130px',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Shield, Sparkles, SkipForward, Play, ArrowLeft } from 'lucide-react';
+import { Clock, Sparkles, SkipForward, Play, ArrowLeft } from 'lucide-react';
 import { MARVEL_CHARACTERS } from '../data/marvelCharacters';
 import { getRoleById } from '../data/roles';
 

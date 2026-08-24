@@ -1,6 +1,25 @@
 import mqtt from 'mqtt';
 import Peer from 'peerjs';
 
+const mqttConnect = (url, options) => {
+  if (typeof mqtt?.connect === 'function') {
+    return mqtt.connect(url, options);
+  }
+  if (mqtt?.default && typeof mqtt.default.connect === 'function') {
+    return mqtt.default.connect(url, options);
+  }
+  if (typeof mqtt === 'function') {
+    return mqtt(url, options);
+  }
+  console.error("MQTT library connect function unavailable:", mqtt);
+  throw new Error("MQTT connection method unavailable");
+};
+
+const createPeerInstance = (id, options) => {
+  const PeerClass = Peer?.default || Peer;
+  return new PeerClass(id, options);
+};
+
 class PeerManager {
   constructor() {
     this.mqttClient = null;
@@ -11,7 +30,6 @@ class PeerManager {
     this.roomCode = null;
     this.isHost = false;
 
-    // Persistent stable Peer ID per session with safe fallback
     let savedId = null;
     try {
       savedId = localStorage.getItem('marvel_draft_peerid');
@@ -115,7 +133,7 @@ class PeerManager {
       this.updateStatus('Connecting...');
 
       try {
-        const client = mqtt.connect(brokerUrls[idx], {
+        const client = mqttConnect(brokerUrls[idx], {
           clientId: `mdraft_${this.myPeerId}_${Math.random().toString(36).substring(2, 6)}`,
           keepalive: 15,
           clean: true,
@@ -152,6 +170,7 @@ class PeerManager {
         });
 
       } catch(e) {
+        console.warn("MQTT connect exception, switching broker:", e);
         tryConnect(idx + 1);
       }
     };
@@ -162,7 +181,7 @@ class PeerManager {
   initPeerJS(onConnected) {
     const peerId = this.isHost ? `mdraft-${this.roomCode}` : undefined;
     try {
-      this.peer = new Peer(peerId, {
+      this.peer = createPeerInstance(peerId, {
         debug: 1,
         config: { iceServers: this.getIceServers() }
       });

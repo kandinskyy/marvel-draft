@@ -100,23 +100,25 @@ export default function App() {
           let newPlayers = [...players];
           let newSpectators = [...spectators];
 
-          if (pMode === 'spectator' || newPlayers.length >= targetCap) {
-            newPlayers = newPlayers.filter(p => p.id !== senderId && p.nickname !== nick);
-            if (!newSpectators.some(s => s.id === senderId || s.nickname === nick)) {
+          const existingIdx = newPlayers.findIndex(p => p.id === senderId || (nick && p.nickname.toLowerCase() === nick.toLowerCase()));
+
+          if (existingIdx >= 0) {
+            // Player already in players array: update ID and Nickname, NEVER move to spectators!
+            newPlayers[existingIdx] = {
+              ...newPlayers[existingIdx],
+              id: senderId,
+              nickname: nick
+            };
+            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname.toLowerCase() !== nick.toLowerCase());
+          } else if (pMode === 'spectator' || newPlayers.length >= targetCap) {
+            // New participant, but room full or requested spectator mode
+            if (!newSpectators.some(s => s.id === senderId || s.nickname.toLowerCase() === nick.toLowerCase())) {
               newSpectators.push({ id: senderId, nickname: nick });
             }
           } else {
-            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname !== nick);
-            const existingIdx = newPlayers.findIndex(p => p.id === senderId || p.nickname === nick);
-            if (existingIdx >= 0) {
-              newPlayers[existingIdx] = {
-                ...newPlayers[existingIdx],
-                id: senderId,
-                nickname: nick
-              };
-            } else {
-              newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
-            }
+            // New participant: add as player
+            newSpectators = newSpectators.filter(s => s.id !== senderId && s.nickname.toLowerCase() !== nick.toLowerCase());
+            newPlayers.push({ id: senderId, nickname: nick, ready: false, isHost: false });
           }
 
           setPlayers(newPlayers);
@@ -158,7 +160,7 @@ export default function App() {
           const targetId = payload.peerId || senderId;
 
           const newPlayers = players.map(p => {
-            if (p.id === targetId || p.nickname === targetNick || p.id === senderId) {
+            if (p.id === targetId || (targetNick && p.nickname.toLowerCase() === targetNick.toLowerCase()) || p.id === senderId) {
               return { ...p, ready: payload.ready };
             }
             return p;
@@ -250,11 +252,11 @@ export default function App() {
   };
 
   const handleToggleReady = () => {
-    const myPlayer = players.find(p => p.id === myPeerId || p.nickname === nickname);
+    const myPlayer = players.find(p => p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase()));
     const newReadyState = !myPlayer?.ready;
 
     const updated = players.map(p => {
-      if (p.id === myPeerId || p.nickname === nickname) {
+      if (p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase())) {
         return { ...p, ready: newReadyState };
       }
       return p;
@@ -269,19 +271,19 @@ export default function App() {
   };
 
   const handleSwitchRole = () => {
-    const isCurrentlyPlayer = players.some(p => p.id === myPeerId || p.nickname === nickname);
+    const isCurrentlyPlayer = players.some(p => p.id === myPeerId || (nickname && p.nickname.toLowerCase() === nickname.toLowerCase()));
     let newPlayers = [...players];
     let newSpectators = [...spectators];
 
     if (isCurrentlyPlayer) {
-      newPlayers = newPlayers.filter(p => p.id !== myPeerId && p.nickname !== nickname);
-      if (!newSpectators.some(s => s.id === myPeerId || s.nickname === nickname)) {
+      newPlayers = newPlayers.filter(p => p.id !== myPeerId && p.nickname.toLowerCase() !== nickname.toLowerCase());
+      if (!newSpectators.some(s => s.id === myPeerId || s.nickname.toLowerCase() === nickname.toLowerCase())) {
         newSpectators.push({ id: myPeerId, nickname });
       }
     } else {
       const targetCap = settings.mode === '1v1' ? 2 : settings.mode === 'tournament_4' ? 4 : 8;
       if (newPlayers.length < targetCap) {
-        newSpectators = newSpectators.filter(s => s.id !== myPeerId && s.nickname !== nickname);
+        newSpectators = newSpectators.filter(s => s.id !== myPeerId && s.nickname.toLowerCase() !== nickname.toLowerCase());
         newPlayers.push({ id: myPeerId, nickname, ready: false, isHost });
       }
     }

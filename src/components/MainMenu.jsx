@@ -11,6 +11,7 @@ export default function MainMenu({
   const [joinCode, setJoinCode] = useState('');
   const [joinNickname, setJoinNickname] = useState(nickname || '');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isChecking, setIsChecking] = useState(false);
 
   const handleCreateClick = () => {
     if (!nickname.trim()) {
@@ -38,8 +39,17 @@ export default function MainMenu({
       return;
     }
     setNickname(finalNick);
-    setErrorMsg('');
-    onJoinGame(joinCode.trim().toUpperCase(), finalNick, asSpectator ? 'spectator' : 'player');
+    setErrorMsg('🔍 Проверка существования комнаты...');
+    setIsChecking(true);
+
+    onJoinGame(joinCode.trim().toUpperCase(), finalNick, asSpectator ? 'spectator' : 'player', (res) => {
+      setIsChecking(false);
+      if (!res.success) {
+        setErrorMsg(res.message || '⚠️ Комната с таким кодом не найдена или была закрыта.');
+      } else {
+        setErrorMsg('');
+      }
+    });
   };
 
   return (
@@ -111,7 +121,7 @@ export default function MainMenu({
             fontWeight: '600',
             marginBottom: '20px'
           }}>
-            ⚠️ {errorMsg}
+            {errorMsg}
           </div>
         )}
 
@@ -203,7 +213,7 @@ export default function MainMenu({
                 fontWeight: '600',
                 marginBottom: '16px'
               }}>
-                ⚠️ {errorMsg}
+                {errorMsg}
               </div>
             )}
 
@@ -257,18 +267,20 @@ export default function MainMenu({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 className="btn-marvel btn-marvel-primary"
+                disabled={isChecking}
                 style={{ width: '100%', padding: '14px' }}
                 onClick={() => handleJoinSubmit(false)}
               >
-                <Play size={18} /> Присоединиться к игре
+                <Play size={18} /> {isChecking ? 'Проверка комнаты...' : 'Присоединиться к игре'}
               </button>
 
               <button
                 className="btn-marvel btn-marvel-gold"
+                disabled={isChecking}
                 style={{ width: '100%', padding: '14px' }}
                 onClick={() => handleJoinSubmit(true)}
               >
-                <Eye size={18} /> Смотреть как Зритель
+                <Eye size={18} /> {isChecking ? 'Проверка...' : 'Смотреть как Зритель'}
               </button>
 
               <button

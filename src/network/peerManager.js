@@ -241,6 +241,39 @@ class PeerManager {
     });
   }
 
+  pingRoom(roomCode, callback) {
+    const cleanCode = String(roomCode || '').toUpperCase().trim();
+    let responded = false;
+
+    const pingClient = this.connectMqtt(cleanCode, (res) => {
+      if (!res.success) {
+        if (!responded) { responded = true; callback({ exists: false }); }
+        return;
+      }
+
+      this.send('PING_ROOM', { senderId: this.myPeerId });
+
+      const prevCb = this.onMessageCallback;
+      this.onMessageCallback = (type, payload, senderId) => {
+        if (type === 'PONG_ROOM' || type === 'ROOM_STATE_UPDATE') {
+          if (!responded) {
+            responded = true;
+            this.onMessageCallback = prevCb;
+            callback({ exists: true });
+          }
+        }
+      };
+
+      setTimeout(() => {
+        if (!responded) {
+          responded = true;
+          this.onMessageCallback = prevCb;
+          callback({ exists: false });
+        }
+      }, 2500);
+    });
+  }
+
   send(type, payload = {}) {
     const msgObj = { type, payload, senderId: this.myPeerId };
     const msgString = JSON.stringify(msgObj);

@@ -143,7 +143,12 @@ function MainAppContent() {
         return;
       }
 
-      if (type === 'JOIN_ROOM') {
+      if (type === 'PING_ROOM') {
+        if (isHost) {
+          peerManager.send('PONG_ROOM', { roomCode, isHost: true });
+          peerManager.send('ROOM_STATE_UPDATE', { players, spectators, settings, currentScreen: screen, draftState });
+        }
+      } else if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
         
         if (safeStrEqual(disconnectedUser, nick)) {
@@ -249,7 +254,7 @@ function MainAppContent() {
         }
       }
     });
-  }, [isHost, players, spectators, settings, disconnectedUser, screen, draftState]);
+  }, [isHost, players, spectators, settings, disconnectedUser, screen, draftState, roomCode]);
 
   useEffect(() => {
     if (screen !== 'lobby' || isHost || hasReceivedRoomState.current) return;
@@ -284,19 +289,34 @@ function MainAppContent() {
     });
   };
 
-  const handleJoinGame = (code, joinNick, joinMode) => {
-    setRoomCode(code);
-    setIsHost(false);
-    hasReceivedRoomState.current = false;
-    peerManager.joinRoom(code, joinNick, joinMode, ({ success }) => {
-      if (success) {
-        setMyPeerId(peerManager.myPeerId);
-        if (joinMode === 'spectator') {
-          setScreen('draft');
-        } else {
-          setScreen('lobby');
+  const handleJoinGame = (code, joinNick, joinMode, onResultCallback) => {
+    const cleanCode = String(code || '').toUpperCase().trim();
+
+    // Verify room existence before joining!
+    peerManager.pingRoom(cleanCode, ({ exists }) => {
+      if (!exists) {
+        if (onResultCallback) {
+          onResultCallback({ success: false, message: `Комната ${cleanCode} не существует или закрыта.` });
         }
+        return;
       }
+
+      setRoomCode(cleanCode);
+      setIsHost(false);
+      hasReceivedRoomState.current = false;
+      peerManager.joinRoom(cleanCode, joinNick, joinMode, ({ success }) => {
+        if (success) {
+          setMyPeerId(peerManager.myPeerId);
+          if (joinMode === 'spectator') {
+            setScreen('draft');
+          } else {
+            setScreen('lobby');
+          }
+          if (onResultCallback) onResultCallback({ success: true });
+        } else {
+          if (onResultCallback) onResultCallback({ success: false, message: `Не удалось подключиться к ${cleanCode}` });
+        }
+      });
     });
   };
 
@@ -349,6 +369,10 @@ function MainAppContent() {
 
   const handleLeaveRoom = () => {
     peerManager.disconnect(true, nickname);
+    setPlayers([]);
+    setSpectators([]);
+    setRoomCode('');
+    setIsHost(false);
     setScreen('main_menu');
   };
 

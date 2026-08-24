@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#854d0e"/>
+      <stop offset="50%" stop-color="#ca8a04"/>
+      <stop offset="100%" stop-color="#1c1917"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="30" fill="url(#bg)"/>
+  <!-- Mask fins -->
+  <path d="M 40 40 Q 65 70 65 110 L 135 110 Q 135 70 160 40 Q 135 45 100 45 Q 65 45 40 40 Z" fill="#09090b"/>
+  <!-- Yellow cowl center -->
+  <path d="M 70 60 C 70 45, 130 45, 130 60 L 125 115 L 100 135 L 75 115 Z" fill="#eab308"/>
+  <!-- Claws mark -->
+  <path d="M 30 150 L 70 180 M 50 140 L 90 170 M 70 130 L 110 160" stroke="#e2e8f0" stroke-width="4" stroke-linecap="round"/>
+</svg>

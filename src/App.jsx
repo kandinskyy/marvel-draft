@@ -25,6 +25,7 @@ export default function App() {
 
   const [draftState, setDraftState] = useState({
     turn: 1,
+    turnNick: '',
     p1Draft: {},
     p2Draft: {},
     p1Passes: 1,
@@ -34,6 +35,10 @@ export default function App() {
   const [tournamentState, setTournamentState] = useState(null);
   const [activeTournamentMatch, setActiveTournamentMatch] = useState(null);
 
+  // 30-Second Reconnection Overlay State
+  const [disconnectedUser, setDisconnectedUser] = useState(null);
+  const [reconnectCountdown, setReconnectCountdown] = useState(30);
+
   const hasReceivedRoomState = useRef(false);
 
   // Save nickname locally
@@ -42,6 +47,27 @@ export default function App() {
       localStorage.setItem('marvel_draft_nick', nickname);
     }
   }, [nickname]);
+
+  // 30-Second Reconnection Countdown Interval
+  useEffect(() => {
+    let timer = null;
+    if (disconnectedUser) {
+      setReconnectCountdown(30);
+      timer = setInterval(() => {
+        setReconnectCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setDisconnectedUser(null);
+            setScreen('main_menu');
+            alert(`Игрок ${disconnectedUser} не переподключился. Был зафиксирован технический выход.`);
+            return 30;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [disconnectedUser]);
 
   // Network Message Handler
   useEffect(() => {
@@ -53,6 +79,10 @@ export default function App() {
 
       if (type === 'JOIN_ROOM') {
         const { nickname: nick, mode: pMode } = payload;
+        if (disconnectedUser === nick) {
+          setDisconnectedUser(null); // Clear disconnect countdown on reconnect!
+        }
+
         if (isHost) {
           const targetCap = settings.mode === '1v1' ? 2 : settings.mode === 'tournament_4' ? 4 : 8;
           let newPlayers = [...players];
@@ -138,9 +168,13 @@ export default function App() {
         setScreen('battle_sim');
       } else if (type === 'TOURNAMENT_STATE_UPDATE') {
         setTournamentState(payload.tournamentState);
+      } else if (type === 'PLAYER_LEFT') {
+        if (payload.nickname) {
+          setDisconnectedUser(payload.nickname);
+        }
       }
     });
-  }, [isHost, players, spectators, settings]);
+  }, [isHost, players, spectators, settings, disconnectedUser]);
 
   // Client Join Retry loop: retries JOIN_ROOM every 800ms UNTIL initial ROOM_STATE_UPDATE is received
   useEffect(() => {
@@ -236,14 +270,21 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
-    peerManager.disconnect();
+    peerManager.disconnect(true, nickname);
     setScreen('main_menu');
   };
 
   const handleStartGame = () => {
     const pCount = settings.passes || 1;
+    const p1Nick = players[0]?.nickname || 'Игрок 1';
+    const p2Nick = players[1]?.nickname || 'Игрок 2';
+
+    const firstTurn = Math.random() < 0.5 ? 1 : 2;
+    const firstTurnNick = firstTurn === 1 ? p1Nick : p2Nick;
+
     const initialDraft = {
-      turn: Math.random() < 0.5 ? 1 : 2,
+      turn: firstTurn,
+      turnNick: firstTurnNick,
       p1Draft: {},
       p2Draft: {},
       p1Passes: pCount,
@@ -262,10 +303,14 @@ export default function App() {
     }
   };
 
-  const createFreshDraftState = (currentSettings) => {
+  const createFreshDraftState = (currentSettings, p1Nick, p2Nick) => {
     const pCount = currentSettings.passes || 1;
+    const firstTurn = Math.random() < 0.5 ? 1 : 2;
+    const firstTurnNick = firstTurn === 1 ? p1Nick : p2Nick;
+
     return {
-      turn: Math.random() < 0.5 ? 1 : 2,
+      turn: firstTurn,
+      turnNick: firstTurnNick,
       p1Draft: {},
       p2Draft: {},
       p1Passes: pCount,
@@ -293,6 +338,9 @@ export default function App() {
   const handleDraftAction = (actionType, payload) => {
     let nextDraft = { ...draftState };
 
+    const p1Nick = activeP1?.nickname || 'Игрок 1';
+    const p2Nick = activeP2?.nickname || 'Игрок 2';
+
     if (actionType === 'ASSIGN_ROLE') {
       const { playerTurn, roleId, char } = payload;
       if (playerTurn === 1) {
@@ -301,12 +349,14 @@ export default function App() {
         nextDraft.p2Draft = { ...nextDraft.p2Draft, [roleId]: char };
       }
       nextDraft.turn = playerTurn === 1 ? 2 : 1;
+      nextDraft.turnNick = nextDraft.turn === 1 ? p1Nick : p2Nick;
       nextDraft.currentStep++;
     } else if (actionType === 'PASS_CHAR') {
       const { playerTurn } = payload;
       if (playerTurn === 1) nextDraft.p1Passes--;
       else nextDraft.p2Passes--;
       nextDraft.turn = playerTurn === 1 ? 2 : 1;
+      nextDraft.turnNick = nextDraft.turn === 1 ? p1Nick : p2Nick;
     }
 
     setDraftState(nextDraft);
@@ -320,7 +370,6 @@ export default function App() {
 
   const handleMatchComplete = (winner) => {
     if (tournamentState && activeTournamentMatch) {
-      // Advance winner in tournament bracket!
       const updatedMatches = tournamentState.matches.map(m => {
         if (m.id === activeTournamentMatch.id) {
           return {
@@ -360,8 +409,11 @@ export default function App() {
     peerManager.send('TOURNAMENT_STATE_UPDATE', { tournamentState: nextState });
 
     if (currentMatch && currentMatch.readyIds.length >= 2) {
-      // Host / Ready trigger creates synchronized draft state for this tournament match!
-      const initialDraft = createFreshDraftState(settings);
+      const initialDraft = createFreshDraftState(
+        settings,
+        currentMatch.p1?.nickname || 'Игрок 1',
+        currentMatch.p2?.nickname || 'Игрок 2'
+      );
       setDraftState(initialDraft);
       setActiveTournamentMatch(currentMatch);
       setScreen('draft');
@@ -379,6 +431,56 @@ export default function App() {
 
   return (
     <>
+      {/* 30-Second Disconnect Reconnection Overlay Modal */}
+      {disconnectedUser && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.88)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 200,
+          padding: '20px'
+        }}>
+          <div className="glass-modal pop-in" style={{
+            width: '100%',
+            maxWidth: '460px',
+            padding: '32px',
+            textAlign: 'center',
+            borderColor: '#ef4444',
+            boxShadow: '0 0 40px rgba(239, 68, 68, 0.4)'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>⚠️</div>
+            <h3 style={{ fontSize: '1.6rem', fontWeight: '900', color: '#ffffff', marginBottom: '8px' }}>
+              Игрок отключился!
+            </h3>
+            <p style={{ color: '#94a3b8', fontSize: '0.95rem', marginBottom: '20px' }}>
+              Игрок <strong style={{ color: '#ef4444' }}>{disconnectedUser}</strong> вышел из игры.
+            </p>
+
+            <div style={{
+              fontSize: '2rem',
+              fontWeight: '900',
+              color: '#fef08a',
+              marginBottom: '24px',
+              fontFamily: 'var(--font-heading)'
+            }}>
+              Переподключение: {reconnectCountdown}с
+            </div>
+
+            <button
+              className="btn-marvel btn-marvel-danger"
+              onClick={() => { setDisconnectedUser(null); setScreen('main_menu'); }}
+              style={{ width: '100%', padding: '14px' }}
+            >
+              Выйти в главное меню
+            </button>
+          </div>
+        </div>
+      )}
+
       {screen === 'main_menu' && (
         <MainMenu
           nickname={nickname}

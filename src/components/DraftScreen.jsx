@@ -19,10 +19,12 @@ export default function DraftScreen({
   const activeRoles = settings?.roles || ['captain', 'strength', 'intelligence', 'magic', 'ranged', 'agility', 'sum'];
   const totalSlots = activeRoles.length;
 
-  const currentTurnPlayer = draftState.turn === 1 ? player1 : player2;
-  const isMyTurn = (draftState.turn === 1 && player1.id === myPeerId) || 
-                   (draftState.turn === 2 && player2.id === myPeerId) ||
-                   (currentTurnPlayer?.nickname === localStorage.getItem('marvel_draft_nick'));
+  const currentTurnNick = draftState.turnNick || (draftState.turn === 1 ? player1.nickname : player2.nickname);
+  const myNick = localStorage.getItem('marvel_draft_nick') || '';
+
+  const isMyTurn = (currentTurnNick.toLowerCase() === myNick.toLowerCase()) ||
+                   (draftState.turn === 1 && player1.id === myPeerId) || 
+                   (draftState.turn === 2 && player2.id === myPeerId);
 
   const p1Draft = draftState.p1Draft || {};
   const p2Draft = draftState.p2Draft || {};
@@ -143,13 +145,13 @@ export default function DraftScreen({
               gap: '6px',
               padding: '6px 14px',
               borderRadius: '20px',
-              background: draftState.turn === 1 ? 'rgba(229, 9, 20, 0.25)' : 'rgba(59, 130, 246, 0.25)',
-              border: `1.5px solid ${draftState.turn === 1 ? '#ef4444' : '#3b82f6'}`,
+              background: isMyTurn ? 'rgba(234, 179, 8, 0.25)' : 'rgba(59, 130, 246, 0.25)',
+              border: `1.5px solid ${isMyTurn ? '#eab308' : '#3b82f6'}`,
               color: '#ffffff',
               fontWeight: '800',
               fontSize: '0.95rem'
             }}>
-              ⚡ Ход: {currentTurnPlayer.nickname} {isMyTurn && '(Вы)'}
+              ⚡ Ход: {currentTurnNick} {isMyTurn && '(Вы)'}
             </div>
 
             <div style={{
@@ -296,7 +298,7 @@ export default function DraftScreen({
                 borderRadius: '16px'
               }}
             >
-              <Sparkles size={20} /> {isMyTurn ? 'Взять карту' : `Ход ${currentTurnPlayer.nickname}`}
+              <Sparkles size={20} /> {isMyTurn ? 'Взять карту' : `Ход ${currentTurnNick}`}
             </button>
           ) : (
             <button

@@ -20,7 +20,6 @@ class PeerManager {
     this.isConnected = false;
     this.status = 'Disconnected';
 
-    // Auto re-sync when mobile Safari regains focus
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', () => this.handleVisibilityChange());
       document.addEventListener('visibilitychange', () => {
@@ -45,8 +44,7 @@ class PeerManager {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-      { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+      { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
     ];
   }
 
@@ -238,18 +236,23 @@ class PeerManager {
     this.onStatusCallback = cb;
   }
 
-  disconnect() {
-    if (this.mqttClient) {
-      try { this.mqttClient.end(); } catch(e){}
+  disconnect(notifyOpponent = false, nickname = '') {
+    if (notifyOpponent) {
+      this.send('PLAYER_LEFT', { nickname });
     }
-    if (this.peer) {
-      try { this.peer.destroy(); } catch(e){}
-    }
-    if (this.broadcastChannel) {
-      try { this.broadcastChannel.close(); } catch(e){}
-    }
-    this.isConnected = false;
-    this.updateStatus('Disconnected');
+    setTimeout(() => {
+      if (this.mqttClient) {
+        try { this.mqttClient.end(); } catch(e){}
+      }
+      if (this.peer) {
+        try { this.peer.destroy(); } catch(e){}
+      }
+      if (this.broadcastChannel) {
+        try { this.broadcastChannel.close(); } catch(e){}
+      }
+      this.isConnected = false;
+      this.updateStatus('Disconnected');
+    }, 100);
   }
 }
 

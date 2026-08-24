@@ -58,7 +58,7 @@ export default function App() {
             clearInterval(timer);
             setDisconnectedUser(null);
             setScreen('main_menu');
-            alert(`Игрок ${disconnectedUser} не переподключился. Был зафиксирован технический выход.`);
+            alert(`Игрок ${disconnectedUser} не переподключился. Был зафиксирован технический результат.`);
             return 30;
           }
           return prev - 1;
@@ -115,6 +115,11 @@ export default function App() {
             spectators: newSpectators,
             settings
           });
+
+          // If match is currently in progress, send current draftState to reconnecting player!
+          if (screen === 'draft' || screen === 'battle_sim') {
+            peerManager.sendTo(senderId, 'START_GAME', { settings, players: newPlayers, draftState });
+          }
         }
       } else if (type === 'ROOM_STATE_UPDATE') {
         hasReceivedRoomState.current = true;
@@ -173,7 +178,7 @@ export default function App() {
         }
       }
     });
-  }, [isHost, players, spectators, settings, disconnectedUser]);
+  }, [isHost, players, spectators, settings, disconnectedUser, screen, draftState]);
 
   // Client Join Retry loop: retries JOIN_ROOM every 800ms UNTIL initial ROOM_STATE_UPDATE is received
   useEffect(() => {
@@ -216,7 +221,11 @@ export default function App() {
     peerManager.joinRoom(code, joinNick, joinMode, ({ success }) => {
       if (success) {
         setMyPeerId(peerManager.myPeerId);
-        setScreen('lobby');
+        if (joinMode === 'spectator') {
+          setScreen('draft'); // Direct to live spectating view if match in progress
+        } else {
+          setScreen('lobby');
+        }
       }
     });
   };
@@ -516,6 +525,7 @@ export default function App() {
           player1={activeP1}
           player2={activeP2}
           myPeerId={myPeerId}
+          roomCode={roomCode}
           settings={settings}
           draftState={draftState}
           onDraftAction={handleDraftAction}
@@ -531,6 +541,7 @@ export default function App() {
           p1Draft={draftState.p1Draft}
           p2Draft={draftState.p2Draft}
           roles={settings.roles}
+          roomCode={roomCode}
           onMatchComplete={handleMatchComplete}
           onLeaveMatch={handleLeaveRoom}
         />

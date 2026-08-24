@@ -10,6 +10,7 @@ export default function BattleSimScreen({
   p1Draft, 
   p2Draft, 
   roles, 
+  roomCode,
   onMatchComplete, 
   onLeaveMatch 
 }) {
@@ -453,6 +454,30 @@ export default function BattleSimScreen({
           );
         })}
       </div>
+
+      {/* Room Code Footer Pill */}
+      {roomCode && (
+        <div 
+          onClick={() => navigator.clipboard.writeText(roomCode)}
+          style={{
+            marginTop: '12px',
+            alignSelf: 'center',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 18px',
+            borderRadius: '20px',
+            background: 'rgba(15, 23, 42, 0.85)',
+            border: '1px dashed rgba(234, 179, 8, 0.5)',
+            color: '#fef08a',
+            fontSize: '0.85rem',
+            fontWeight: '700',
+            cursor: 'pointer'
+          }}
+        >
+          🔑 Код комнаты: <strong>{roomCode}</strong> (нажмите, чтобы скопировать)
+        </div>
+      )}
 
       {/* Control Buttons Bar */}
       <div style={{

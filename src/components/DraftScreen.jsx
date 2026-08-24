@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Sparkles, SkipForward, Play, ArrowLeft } from 'lucide-react';
+import { Clock, Sparkles, SkipForward, Play, ArrowLeft, Copy, Check, Key } from 'lucide-react';
 import { MARVEL_CHARACTERS } from '../data/marvelCharacters';
 import { getRoleById } from '../data/roles';
 
@@ -7,6 +7,7 @@ export default function DraftScreen({
   player1, 
   player2, 
   myPeerId, 
+  roomCode,
   settings, 
   draftState, 
   onDraftAction, 
@@ -15,6 +16,7 @@ export default function DraftScreen({
 }) {
   const [drawnChar, setDrawnChar] = useState(null);
   const [timeLeft, setTimeLeft] = useState(60);
+  const [copied, setCopied] = useState(false);
 
   const activeRoles = settings?.roles || ['captain', 'strength', 'intelligence', 'magic', 'ranged', 'agility', 'sum'];
   const totalSlots = activeRoles.length;
@@ -33,7 +35,15 @@ export default function DraftScreen({
   const p2Completed = Object.keys(p2Draft).length === totalSlots;
   const draftFinished = p1Completed && p2Completed;
 
-  // 60s Turn Timer
+  const handleCopyCode = () => {
+    if (roomCode) {
+      navigator.clipboard.writeText(roomCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  // 60s Turn Timer with Auto-Draw & Random Role Placement on Timeout
   useEffect(() => {
     if (draftFinished || !draftState.turn) return;
 
@@ -42,10 +52,8 @@ export default function DraftScreen({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          if (isMyTurn && drawnChar) {
-            autoAssignFirstAvailableRole();
-          } else if (isMyTurn && !drawnChar) {
-            handleDrawClick();
+          if (isMyTurn) {
+            handleTimeoutAutoAction();
           }
           return 60;
         }
@@ -54,7 +62,36 @@ export default function DraftScreen({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [draftState.turn, draftState.currentStep, draftFinished]);
+  }, [draftState.turn, draftState.currentStep, draftFinished, isMyTurn, drawnChar]);
+
+  const handleTimeoutAutoAction = () => {
+    const myDraft = draftState.turn === 1 ? p1Draft : p2Draft;
+    const freeRoles = activeRoles.filter(rId => !myDraft[rId]);
+    if (freeRoles.length === 0) return;
+
+    const randomRole = freeRoles[Math.floor(Math.random() * freeRoles.length)];
+
+    let charToAssign = drawnChar;
+    if (!charToAssign) {
+      const usedCharIds = new Set([
+        ...Object.values(p1Draft).map(c => c.id),
+        ...Object.values(p2Draft).map(c => c.id)
+      ]);
+      const availablePool = MARVEL_CHARACTERS.filter(c => !usedCharIds.has(c.id));
+      if (availablePool.length > 0) {
+        charToAssign = availablePool[Math.floor(Math.random() * availablePool.length)];
+      }
+    }
+
+    if (charToAssign && randomRole) {
+      onDraftAction('ASSIGN_ROLE', {
+        playerTurn: draftState.turn,
+        roleId: randomRole,
+        char: charToAssign
+      });
+      setDrawnChar(null);
+    }
+  };
 
   const handleDrawClick = () => {
     if (!isMyTurn || draftFinished) return;
@@ -70,15 +107,6 @@ export default function DraftScreen({
     const randomChar = availablePool[Math.floor(Math.random() * availablePool.length)];
     setDrawnChar(randomChar);
     onDraftAction('DRAW_CHAR', { char: randomChar });
-  };
-
-  const autoAssignFirstAvailableRole = () => {
-    if (!drawnChar) return;
-    const myDraft = draftState.turn === 1 ? p1Draft : p2Draft;
-    const freeRole = activeRoles.find(rId => !myDraft[rId]);
-    if (freeRole) {
-      handleAssignRole(freeRole);
-    }
   };
 
   const handleAssignRole = (roleId) => {
@@ -394,6 +422,36 @@ export default function DraftScreen({
           </div>
         </div>
       </div>
+
+      {/* Room Code Footer Pill for Reconnecting & Spectating */}
+      {roomCode && (
+        <div 
+          onClick={handleCopyCode}
+          style={{
+            marginTop: '16px',
+            alignSelf: 'center',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 20px',
+            borderRadius: '20px',
+            background: 'rgba(15, 23, 42, 0.85)',
+            border: '1px dashed rgba(234, 179, 8, 0.5)',
+            color: copied ? '#4ade80' : '#fef08a',
+            fontSize: '0.85rem',
+            fontWeight: '700',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)'
+          }}
+        >
+          <Key size={14} color="#eab308" />
+          <span>Код комнаты: <strong>{roomCode}</strong></span>
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '4px' }}>
+            ({copied ? 'Скопировано!' : 'нажмите для зрителей/переподключения'})
+          </span>
+        </div>
+      )}
 
       {/* Character Role Selection Modal */}
       {drawnChar && isMyTurn && (

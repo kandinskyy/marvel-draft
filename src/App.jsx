@@ -32,6 +32,7 @@ export default function App() {
   });
 
   const [tournamentState, setTournamentState] = useState(null);
+  const [activeTournamentMatch, setActiveTournamentMatch] = useState(null);
 
   const hasReceivedRoomState = useRef(false);
 
@@ -123,6 +124,14 @@ export default function App() {
         } else {
           setScreen('draft');
         }
+      } else if (type === 'START_TOURNAMENT_MATCH') {
+        if (payload.draftState) {
+          setDraftState(payload.draftState);
+        }
+        if (payload.match) {
+          setActiveTournamentMatch(payload.match);
+        }
+        setScreen('draft');
       } else if (type === 'DRAFT_STATE_UPDATE') {
         setDraftState(payload.draftState);
       } else if (type === 'START_BATTLE') {
@@ -234,7 +243,7 @@ export default function App() {
   const handleStartGame = () => {
     const pCount = settings.passes || 1;
     const initialDraft = {
-      turn: Math.random() < 0.5 ? 1 : 2, // Host determines synchronized randomized first turn!
+      turn: Math.random() < 0.5 ? 1 : 2,
       p1Draft: {},
       p2Draft: {},
       p1Passes: pCount,
@@ -253,7 +262,7 @@ export default function App() {
     }
   };
 
-  const initDraftState = (currentSettings) => {
+  const createFreshDraftState = (currentSettings) => {
     const pCount = currentSettings.passes || 1;
     return {
       turn: Math.random() < 0.5 ? 1 : 2,
@@ -310,7 +319,27 @@ export default function App() {
   };
 
   const handleMatchComplete = (winner) => {
-    setScreen('main_menu');
+    if (tournamentState && activeTournamentMatch) {
+      // Advance winner in tournament bracket!
+      const updatedMatches = tournamentState.matches.map(m => {
+        if (m.id === activeTournamentMatch.id) {
+          return {
+            ...m,
+            completed: true,
+            winner: winner?.id === m.p1?.id ? 1 : 2
+          };
+        }
+        return m;
+      });
+
+      const nextState = { ...tournamentState, matches: updatedMatches };
+      setTournamentState(nextState);
+      peerManager.send('TOURNAMENT_STATE_UPDATE', { tournamentState: nextState });
+      setActiveTournamentMatch(null);
+      setScreen('tournament');
+    } else {
+      setScreen('main_menu');
+    }
   };
 
   const handleTournamentReady = (matchId) => {
@@ -326,17 +355,27 @@ export default function App() {
     });
 
     const currentMatch = updatedMatches.find(m => m.id === matchId);
-    setTournamentState({ ...tournamentState, matches: updatedMatches });
+    const nextState = { ...tournamentState, matches: updatedMatches };
+    setTournamentState(nextState);
+    peerManager.send('TOURNAMENT_STATE_UPDATE', { tournamentState: nextState });
 
     if (currentMatch && currentMatch.readyIds.length >= 2) {
-      const initialDraft = initDraftState(settings);
+      // Host / Ready trigger creates synchronized draft state for this tournament match!
+      const initialDraft = createFreshDraftState(settings);
       setDraftState(initialDraft);
+      setActiveTournamentMatch(currentMatch);
       setScreen('draft');
+
+      peerManager.send('START_TOURNAMENT_MATCH', {
+        matchId,
+        match: currentMatch,
+        draftState: initialDraft
+      });
     }
   };
 
-  const p1 = players[0] || { nickname: 'Игрок 1', id: 'p1' };
-  const p2 = players[1] || { nickname: 'Игрок 2', id: 'p2' };
+  const activeP1 = activeTournamentMatch ? activeTournamentMatch.p1 : players[0] || { nickname: 'Игрок 1', id: 'p1' };
+  const activeP2 = activeTournamentMatch ? activeTournamentMatch.p2 : players[1] || { nickname: 'Игрок 2', id: 'p2' };
 
   return (
     <>
@@ -373,8 +412,8 @@ export default function App() {
 
       {screen === 'draft' && (
         <DraftScreen
-          player1={p1}
-          player2={p2}
+          player1={activeP1}
+          player2={activeP2}
           myPeerId={myPeerId}
           settings={settings}
           draftState={draftState}
@@ -386,8 +425,8 @@ export default function App() {
 
       {screen === 'battle_sim' && (
         <BattleSimScreen
-          player1={p1}
-          player2={p2}
+          player1={activeP1}
+          player2={activeP2}
           p1Draft={draftState.p1Draft}
           p2Draft={draftState.p2Draft}
           roles={settings.roles}
